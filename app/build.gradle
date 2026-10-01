@@ -1,0 +1,53 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'de.tdct.trailcam'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "de.tdct.trailcam"
+        minSdk 24
+        targetSdk 34
+        versionCode 1
+        versionName "1.0"
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    implementation 'androidx.appcompat:appcompat:1.7.0'
+    constraints {
+        implementation('org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.8.22') {
+            because 'align kotlin stdlib versions'
+        }
+        implementation('org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.8.22') {
+            because 'align kotlin stdlib versions'
+        }
+    }
+}
+
+// signing config for local release builds
+def ksPath = System.getenv("TRAILCAM_KEYSTORE") ?: "/tmp/trailcam.keystore"
+if (file(ksPath).exists()) {
+    android.signingConfigs {
+        release {
+            storeFile file(ksPath)
+            storePassword System.getenv("TRAILCAM_STORE_PASS") ?: "trailcam2024"
+            keyAlias System.getenv("TRAILCAM_KEY_ALIAS") ?: "trailcam"
+            keyPassword System.getenv("TRAILCAM_KEY_PASS") ?: "trailcam2024"
+        }
+    }
+    android.buildTypes.release.signingConfig = android.signingConfigs.release
+}
