@@ -30,7 +30,7 @@ import androidx.core.app.ActivityCompat;
 
 import java.util.Collections;
 
-public class MainActivity extends Activity implements CameraSurfaceView.Listener, AppLog.Listener {
+public class MainActivity extends Activity implements CameraSurfaceView.Listener {
 
     private static final int REQ_PERMISSION = 100;
     private static final int MAX_PREVIEW_WIDTH = 1280;
@@ -42,7 +42,7 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
     private android.view.View colorPreview;
     private SeekBar thresholdSlider;
     private TextView thresholdValue;
-    private TextView logOverlay;
+    private Button btnPickEyedropper;
 
     private CameraDevice camera;
     private CameraCaptureSession session;
@@ -51,6 +51,8 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
     private Handler bgHandler;
     private SurfaceTexture glSurfaceTexture;
     private boolean markMode = false;
+    private boolean pickMode = false;
+    private final float[] hsvTmp = new float[3];
 
     private int cameraGeneration = 0;
     private boolean cameraStarting = false;
@@ -98,10 +100,8 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
         setContentView(R.layout.activity_main);
 
         AppLog.init(getApplication());
-        AppLog.setListener(this);
         AppLog.d("onCreate");
         surfaceView = findViewById(R.id.surface_view);
-        logOverlay = findViewById(R.id.log_overlay);
         btnMode = findViewById(R.id.btn_mode);
         btnPickColor = findViewById(R.id.btn_pick_color);
         colorPreview = findViewById(R.id.color_preview);
@@ -117,18 +117,29 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
         });
 
         btnPickColor.setOnClickListener(v -> showColorPicker());
+        btnPickEyedropper = findViewById(R.id.btn_pick_eyedropper);
+        btnPickEyedropper.setOnClickListener(v -> {
+            pickMode = !pickMode;
+            surfaceView.setPickMode(pickMode);
+            updateControls();
+            if (pickMode) {
+                showToast("Farbe im Bild antippen");
+            }
+        });
 
         thresholdSlider.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                float t = progress / 100f;
+                float t = (progress / 100f) * 0.5f;
                 thresholdValue.setText(String.valueOf(progress));
-                surfaceView.getRenderer().setThreshold(t);
+                surfaceView.getRenderer().setHueTolerance(t);
             }
 
             @Override public void onStartTrackingTouch(SeekBar seekBar) { }
             @Override public void onStopTrackingTouch(SeekBar seekBar) { }
         });
+
+        surfaceView.getRenderer().setHueTolerance((thresholdSlider.getProgress() / 100f) * 0.5f);
 
         updateControls();
 
@@ -138,27 +149,48 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
         }
     }
 
-    @Override
-    public void onLog(String line) {
-        runOnUiThread(() -> {
-            if (logOverlay != null) {
-                logOverlay.setText(AppLog.getLog());
-            }
-        });
-    }
-
     private void updateControls() {
         btnMode.setText(markMode ? R.string.btn_mode_normal : R.string.btn_mode_mark);
-        btnPickColor.setEnabled(markMode);
+        btnPickColor.setEnabled(markMode && !pickMode);
+        btnPickEyedropper.setEnabled(markMode);
+        btnPickEyedropper.setText(pickMode ? "Pipette aktiv" : "Pipette");
         thresholdSlider.setEnabled(markMode);
     }
 
+    @Override
+    public void onColorPicked(float r, float g, float b) {
+        runOnUiThread(() -> {
+            pickMode = false;
+            surfaceView.setPickMode(false);
+            int color = android.graphics.Color.rgb(
+                    Math.round(r * 255), Math.round(g * 255), Math.round(b * 255));
+            float[] hsv = new float[3];
+            android.graphics.Color.colorToHSV(color, hsv);
+            int pure = android.graphics.Color.HSVToColor(new float[]{hsv[0], 1f, 1f});
+            pickedR = android.graphics.Color.red(pure) / 255f;
+            pickedG = android.graphics.Color.green(pure) / 255f;
+            pickedB = android.graphics.Color.blue(pure) / 255f;
+            surfaceView.getRenderer().setTargetColor(pickedR, pickedG, pickedB);
+            colorPreview.setBackgroundColor(pure);
+            updateControls();
+            showToast("Farbe \u00fcbernommen");
+        });
+    }
+
     private void showColorPicker() {
-        String[] names = {"Rot", "Orange", "Gelb", "Gr\u00fcn", "Cyan", "Blau", "Magenta", "Wei\u00df"};
+        String[] names = {"Pipette (Farbe im Bild w\u00e4hlen)",
+                "Rot", "Orange", "Gelb", "Gr\u00fcn", "Cyan", "Blau", "Magenta"};
         new AlertDialog.Builder(this)
                 .setTitle(R.string.select_color)
                 .setItems(names, (d, which) -> {
-                    float[] c = PRESET_COLORS[which];
+                    if (which == 0) {
+                        pickMode = true;
+                        surfaceView.setPickMode(true);
+                        updateControls();
+                        showToast("Farbe im Bild antippen");
+                        return;
+                    }
+                    float[] c = PRESET_COLORS[which - 1];
                     pickedR = c[0]; pickedG = c[1]; pickedB = c[2];
                     surfaceView.getRenderer().setTargetColor(pickedR, pickedG, pickedB);
                     int color = android.graphics.Color.rgb(

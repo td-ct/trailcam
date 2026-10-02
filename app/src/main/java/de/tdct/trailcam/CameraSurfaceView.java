@@ -9,6 +9,11 @@ import android.util.AttributeSet;
 import android.view.MotionEvent;
 import android.view.ScaleGestureDetector;
 
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.nio.FloatBuffer;
+import java.util.concurrent.atomic.AtomicReference;
+
 import javax.microedition.khronos.egl.EGLConfig;
 import javax.microedition.khronos.opengles.GL10;
 
@@ -17,6 +22,7 @@ public class CameraSurfaceView extends GLSurfaceView implements ScaleGestureDete
     public interface Listener {
         void onSurfaceCreated(SurfaceTexture texture, int texId);
         void onFrameAvailable();
+        void onColorPicked(float r, float g, float b);
     }
 
     private static final float MIN_ZOOM = 1.0f;
@@ -25,8 +31,11 @@ public class CameraSurfaceView extends GLSurfaceView implements ScaleGestureDete
     private Listener listener;
     private ScaleGestureDetector scaleDetector;
     private float zoom = 1.0f;
-    private boolean pinchEnabled = true;
     private CameraRenderer renderer;
+
+    private volatile boolean pickMode = false;
+    private final AtomicReference<float[]> pendingPick = new AtomicReference<>();
+    private boolean multiTouch = false;
 
     public CameraSurfaceView(Context context) {
         super(context);
@@ -51,12 +60,12 @@ public class CameraSurfaceView extends GLSurfaceView implements ScaleGestureDete
         this.listener = listener;
     }
 
-    public float getZoom() {
-        return zoom;
+    public void setPickMode(boolean enabled) {
+        this.pickMode = enabled;
     }
 
-    public void setPinchEnabled(boolean enabled) {
-        this.pinchEnabled = enabled;
+    public float getZoom() {
+        return zoom;
     }
 
     void fireSurfaceCreated(SurfaceTexture texture, int texId) {
@@ -67,10 +76,28 @@ public class CameraSurfaceView extends GLSurfaceView implements ScaleGestureDete
         if (listener != null) listener.onFrameAvailable();
     }
 
+    void fireColorPicked(float r, float g, float b) {
+        if (listener != null) listener.onColorPicked(r, g, b);
+    }
+
     @Override
     public boolean onTouchEvent(MotionEvent event) {
-        if (!pinchEnabled) return false;
+        if (event.getPointerCount() >= 2) {
+            multiTouch = true;
+        }
+        if (event.getActionMasked() == MotionEvent.ACTION_DOWN) {
+            multiTouch = false;
+        }
         scaleDetector.onTouchEvent(event);
+        if (pickMode
+                && !multiTouch
+                && event.getActionMasked() == MotionEvent.ACTION_UP
+                && pendingPick.get() == null) {
+            float xNorm = event.getX() / Math.max(1f, getWidth());
+            float yNorm = event.getY() / Math.max(1f, getHeight());
+            pendingPick.set(new float[]{xNorm, yNorm});
+            queueEvent(() -> renderer.requestPick(pendingPick));
+        }
         return true;
     }
 
@@ -115,8 +142,6 @@ public class CameraSurfaceView extends GLSurfaceView implements ScaleGestureDete
                 "varying vec2 vTexCoord;\n" +
                 "uniform samplerExternalOES uTexture;\n" +
                 "uniform float uZoom;\n" +
-                "uniform float uTexW;\n" +
-                "uniform float uTexH;\n" +
                 "void main() {\n" +
                 "  vec2 c = vTexCoord - vec2(0.5);\n" +
                 "  c = c / uZoom;\n" +
@@ -135,8 +160,7 @@ public class CameraSurfaceView extends GLSurfaceView implements ScaleGestureDete
                 "uniform samplerExternalOES uTexture;\n" +
                 "uniform float uZoom;\n" +
                 "uniform vec3 uTargetColor;\n" +
-                "uniform float uThreshold;\n" +
-                "uniform float uAspect;\n" +
+                "uniform float uHueTol;\n" +
                 "\n" +
                 "vec3 rgb2hsv(vec3 c) {\n" +
                 "  vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);\n" +
@@ -154,16 +178,16 @@ public class CameraSurfaceView extends GLSurfaceView implements ScaleGestureDete
                 "  }\n" +
                 "  vec3 col = texture2D(uTexture, tc).rgb;\n" +
                 "  vec3 hsv = rgb2hsv(col);\n" +
-                "  vec3 target = rgb2hsv(uTargetColor);\n" +
-                "  float hueDiff = abs(hsv.x - target.x);\n" +
+                "  float targetHue = rgb2hsv(uTargetColor).x;\n" +
+                "  float hueDiff = abs(hsv.x - targetHue);\n" +
                 "  if (hueDiff > 0.5) hueDiff = 1.0 - hueDiff;\n" +
-                "  float satDiff = abs(hsv.y - target.y);\n" +
-                "  float valDiff = abs(hsv.z - target.z);\n" +
-                "  float dist = hueDiff + 0.5 * satDiff + 0.5 * valDiff;\n" +
-                "  float match = step(dist, uThreshold);\n" +
+                "  float match = step(hueDiff, uHueTol) * step(0.25, hsv.y);\n" +
                 "  vec3 faded = mix(vec3(dot(col, vec3(0.299, 0.587, 0.114))), col, 0.35);\n" +
                 "  faded *= 0.75;\n" +
-                "  vec3 glow = uTargetColor * (0.5 + 1.6 * hsv.z);\n" +
+                "  vec3 hsvGlow = vec3(targetHue, 1.0, clamp(0.6 + 0.8 * hsv.z, 0.0, 1.0));\n" +
+                "  vec3 K2 = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0).xxx;\n" +
+                "  vec3 p2 = abs(fract(hsvGlow.xxx + vec3(1.0, 2.0 / 3.0, 1.0 / 3.0)) * 6.0 - vec3(3.0));\n" +
+                "  vec3 glow = hsvGlow.z * mix(K2, clamp(p2 - K2, 0.0, 1.0), hsvGlow.y);\n" +
                 "  vec3 result = mix(faded, glow, match);\n" +
                 "  gl_FragColor = vec4(result, 1.0);\n" +
                 "}\n";
@@ -173,19 +197,35 @@ public class CameraSurfaceView extends GLSurfaceView implements ScaleGestureDete
         private int programMark;
         private int aPosLoc, aTexLoc;
         private int mvpLocN, stLocN, zoomLocN;
-        private int mvpLocM, stLocM, zoomLocM, colorLocM, threshLocM;
+        private int mvpLocM, stLocM, zoomLocM, colorLocM, tolLocM;
         private int texId;
         private SurfaceTexture surfaceTexture;
         private float[] mvp = new float[16];
         private float[] stMatrix = new float[16];
+        private final FloatBuffer vertexBuffer;
 
         private volatile boolean markMode = false;
+        private volatile boolean picking = false;
         private volatile float zoom = 1.0f;
         private volatile float[] targetColor = {1f, 0f, 0f};
-        private volatile float threshold = 0.30f;
+        private volatile float hueTol = 0.075f;
+        private AtomicReference<float[]> pickRequest;
+        private int surfaceWidth = 1;
+        private int surfaceHeight = 1;
 
         CameraRenderer(CameraSurfaceView view) {
             this.view = view;
+            float[] verts = new float[]{
+                    -1f, -1f, 0f, 0f, 0f,
+                    1f, -1f, 0f, 1f, 0f,
+                    -1f, 1f, 0f, 0f, 1f,
+                    1f, 1f, 0f, 1f, 1f,
+            };
+            ByteBuffer bb = ByteBuffer.allocateDirect(verts.length * 4);
+            bb.order(ByteOrder.nativeOrder());
+            vertexBuffer = bb.asFloatBuffer();
+            vertexBuffer.put(verts);
+            vertexBuffer.position(0);
         }
 
         public void setZoom(float z) {
@@ -200,8 +240,12 @@ public class CameraSurfaceView extends GLSurfaceView implements ScaleGestureDete
             targetColor[0] = r; targetColor[1] = g; targetColor[2] = b;
         }
 
-        public void setThreshold(float t01) {
-            threshold = t01;
+        public void setHueTolerance(float tol01) {
+            hueTol = tol01;
+        }
+
+        public void requestPick(AtomicReference<float[]> request) {
+            pickRequest = request;
         }
 
         @Override
@@ -227,7 +271,7 @@ public class CameraSurfaceView extends GLSurfaceView implements ScaleGestureDete
             stLocM = GLES20.glGetUniformLocation(programMark, "uSTMatrix");
             zoomLocM = GLES20.glGetUniformLocation(programMark, "uZoom");
             colorLocM = GLES20.glGetUniformLocation(programMark, "uTargetColor");
-            threshLocM = GLES20.glGetUniformLocation(programMark, "uThreshold");
+            tolLocM = GLES20.glGetUniformLocation(programMark, "uHueTol");
 
             view.fireSurfaceCreated(surfaceTexture, texId);
         }
@@ -235,6 +279,8 @@ public class CameraSurfaceView extends GLSurfaceView implements ScaleGestureDete
         @Override
         public void onSurfaceChanged(GL10 gl, int width, int height) {
             GLES20.glViewport(0, 0, width, height);
+            surfaceWidth = Math.max(1, width);
+            surfaceHeight = Math.max(1, height);
             float aspect = (float) width / Math.max(1, height);
             android.opengl.Matrix.orthoM(mvp, 0, -aspect, aspect, -1, 1, -1, 1);
         }
@@ -246,33 +292,47 @@ public class CameraSurfaceView extends GLSurfaceView implements ScaleGestureDete
             surfaceTexture.updateTexImage();
             surfaceTexture.getTransformMatrix(stMatrix);
 
-            float[] verts = new float[]{
-                    -1f, -1f, 0f, 0f, 0f,
-                    1f, -1f, 0f, 1f, 0f,
-                    -1f, 1f, 0f, 0f, 1f,
-                    1f, 1f, 0f, 1f, 1f,
-            };
-            java.nio.ByteBuffer bb = java.nio.ByteBuffer.allocateDirect(verts.length * 4);
-            bb.order(java.nio.ByteOrder.nativeOrder());
-            java.nio.FloatBuffer fb = bb.asFloatBuffer();
-            fb.put(verts);
-            fb.position(0);
+            AtomicReference<float[]> req = pickRequest;
+            boolean pickNow = (req != null && req.get() != null);
 
-            int program = markMode ? programMark : programNormal;
+            draw(markMode && !pickNow);
+
+            if (pickNow) {
+                float[] pos = req.getAndSet(null);
+                pickRequest = null;
+                if (pos != null) {
+                    int px = Math.min(surfaceWidth - 1, Math.max(0, (int) (pos[0] * surfaceWidth)));
+                    int py = Math.min(surfaceHeight - 1, Math.max(0, (int) (pos[1] * surfaceHeight)));
+                    ByteBuffer pb = ByteBuffer.allocateDirect(4);
+                    pb.order(ByteOrder.nativeOrder());
+                    GLES20.glReadPixels(px, py, 1, 1, GLES20.GL_RGBA, GLES20.GL_UNSIGNED_BYTE, pb);
+                    float r = (pb.get(0) & 0xFF) / 255f;
+                    float g = (pb.get(1) & 0xFF) / 255f;
+                    float b = (pb.get(2) & 0xFF) / 255f;
+                    view.fireColorPicked(r, g, b);
+                }
+            }
+        }
+
+        private void draw(boolean mark) {
+            int program = mark ? programMark : programNormal;
             GLES20.glUseProgram(program);
             aPosLoc = GLES20.glGetAttribLocation(program, "aPosition");
             aTexLoc = GLES20.glGetAttribLocation(program, "aTexCoord");
-            GLES20.glVertexAttribPointer(aPosLoc, 2, GLES20.GL_FLOAT, false, 20, fb);
+            vertexBuffer.position(0);
+            GLES20.glVertexAttribPointer(aPosLoc, 2, GLES20.GL_FLOAT, false, 20, vertexBuffer);
             GLES20.glEnableVertexAttribArray(aPosLoc);
-            GLES20.glVertexAttribPointer(aTexLoc, 3, GLES20.GL_FLOAT, false, 20, fb.position(3));
+            vertexBuffer.position(3);
+            GLES20.glVertexAttribPointer(aTexLoc, 3, GLES20.GL_FLOAT, false, 20, vertexBuffer);
             GLES20.glEnableVertexAttribArray(aTexLoc);
+            vertexBuffer.position(0);
 
-            GLES20.glUniformMatrix4fv(markMode ? mvpLocM : mvpLocN, 1, false, mvp, 0);
-            GLES20.glUniformMatrix4fv(markMode ? stLocM : stLocN, 1, false, stMatrix, 0);
-            GLES20.glUniform1f(markMode ? zoomLocM : zoomLocN, zoom);
-            if (markMode) {
+            GLES20.glUniformMatrix4fv(mark ? mvpLocM : mvpLocN, 1, false, mvp, 0);
+            GLES20.glUniformMatrix4fv(mark ? stLocM : stLocN, 1, false, stMatrix, 0);
+            GLES20.glUniform1f(mark ? zoomLocM : zoomLocN, zoom);
+            if (mark) {
                 GLES20.glUniform3f(colorLocM, targetColor[0], targetColor[1], targetColor[2]);
-                GLES20.glUniform1f(threshLocM, threshold);
+                GLES20.glUniform1f(tolLocM, hueTol);
             }
 
             GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
