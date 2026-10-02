@@ -161,6 +161,7 @@ public class CameraSurfaceView extends GLSurfaceView implements ScaleGestureDete
                 "uniform float uZoom;\n" +
                 "uniform vec3 uTargetColor;\n" +
                 "uniform float uHueTol;\n" +
+                "uniform float uMinLum;\n" +
                 "\n" +
                 "vec3 hsv2rgb(vec3 c) {\n" +
                 "  vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);\n" +
@@ -193,9 +194,9 @@ public class CameraSurfaceView extends GLSurfaceView implements ScaleGestureDete
                 "  float match = step(dist, uHueTol) * step(0.15, hsv.y);\n" +
                 "  vec3 faded = mix(vec3(dot(col, vec3(0.299, 0.587, 0.114))), col, 0.30);\n" +
                 "  faded *= 0.65;\n" +
-                "  float lum = clamp(0.80 + 0.4 * hsv.z, 0.80, 1.0);\n" +
-                "  float sat = max(target.y, 0.75);\n" +
-                "  vec3 glow = hsv2rgb(vec3(target.x, sat, lum));\n" +
+                "  float sat = clamp(hsv.y * 1.6, 0.85, 1.0);\n" +
+                "  float lum = clamp(max(hsv.z, uMinLum) * 1.15, uMinLum, 1.0);\n" +
+                "  vec3 glow = hsv2rgb(vec3(hsv.x, sat, lum));\n" +
                 "  glow = mix(glow, vec3(1.0), 0.10);\n" +
                 "  vec3 result = mix(faded, glow, match);\n" +
                 "  gl_FragColor = vec4(result, 1.0);\n" +
@@ -206,7 +207,7 @@ public class CameraSurfaceView extends GLSurfaceView implements ScaleGestureDete
         private int programMark;
         private int aPosLoc, aTexLoc;
         private int mvpLocN, stLocN, zoomLocN;
-        private int mvpLocM, stLocM, zoomLocM, colorLocM, tolLocM;
+        private int mvpLocM, stLocM, zoomLocM, colorLocM, tolLocM, minLumLocM;
         private int texId;
         private SurfaceTexture surfaceTexture;
         private float[] mvp = new float[16];
@@ -218,6 +219,7 @@ public class CameraSurfaceView extends GLSurfaceView implements ScaleGestureDete
         private volatile float zoom = 1.0f;
         private volatile float[] targetColor = {1f, 0f, 0f};
         private volatile float hueTol = 0.075f;
+        private volatile float minLum = 0.5f;
         private AtomicReference<float[]> pickRequest;
         private int surfaceWidth = 1;
         private int surfaceHeight = 1;
@@ -253,6 +255,10 @@ public class CameraSurfaceView extends GLSurfaceView implements ScaleGestureDete
             hueTol = tol01;
         }
 
+        public void setMinLuminance(float lum01) {
+            minLum = lum01;
+        }
+
         public void requestPick(AtomicReference<float[]> request) {
             pickRequest = request;
         }
@@ -285,6 +291,7 @@ public class CameraSurfaceView extends GLSurfaceView implements ScaleGestureDete
             zoomLocM = GLES20.glGetUniformLocation(programMark, "uZoom");
             colorLocM = GLES20.glGetUniformLocation(programMark, "uTargetColor");
             tolLocM = GLES20.glGetUniformLocation(programMark, "uHueTol");
+            minLumLocM = GLES20.glGetUniformLocation(programMark, "uMinLum");
 
             view.fireSurfaceCreated(surfaceTexture, texId);
         }
@@ -374,6 +381,7 @@ public class CameraSurfaceView extends GLSurfaceView implements ScaleGestureDete
             if (mark) {
                 GLES20.glUniform3f(colorLocM, targetColor[0], targetColor[1], targetColor[2]);
                 GLES20.glUniform1f(tolLocM, hueTol);
+                GLES20.glUniform1f(minLumLocM, minLum);
             }
 
             GLES20.glActiveTexture(GLES20.GL_TEXTURE0);

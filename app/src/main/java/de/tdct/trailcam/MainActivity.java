@@ -42,6 +42,8 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
     private android.view.View colorPreview;
     private SeekBar thresholdSlider;
     private TextView thresholdValue;
+    private SeekBar minLumSlider;
+    private TextView minLumValue;
     private Button btnPickEyedropper;
 
     private CameraDevice camera;
@@ -107,6 +109,8 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
         colorPreview = findViewById(R.id.color_preview);
         thresholdSlider = findViewById(R.id.threshold_slider);
         thresholdValue = findViewById(R.id.threshold_value);
+        minLumSlider = findViewById(R.id.minlum_slider);
+        minLumValue = findViewById(R.id.minlum_value);
 
         surfaceView.setListener(this);
 
@@ -127,6 +131,17 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
             }
         });
 
+        minLumSlider.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                minLumValue.setText(String.valueOf(progress));
+                surfaceView.getRenderer().setMinLuminance(progress / 100f);
+            }
+
+            @Override public void onStartTrackingTouch(SeekBar seekBar) { }
+            @Override public void onStopTrackingTouch(SeekBar seekBar) { }
+        });
+
         thresholdSlider.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
@@ -140,6 +155,7 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
         });
 
         surfaceView.getRenderer().setHueTolerance((thresholdSlider.getProgress() / 100f) * 0.5f);
+        surfaceView.getRenderer().setMinLuminance(minLumSlider.getProgress() / 100f);
 
         updateControls();
 
@@ -155,6 +171,7 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
         btnPickEyedropper.setEnabled(markMode);
         btnPickEyedropper.setText(pickMode ? "Pipette aktiv" : "Pipette");
         thresholdSlider.setEnabled(markMode);
+        minLumSlider.setEnabled(markMode);
     }
 
     @Override
