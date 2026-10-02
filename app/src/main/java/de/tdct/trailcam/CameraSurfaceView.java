@@ -186,7 +186,7 @@ public class CameraSurfaceView extends GLSurfaceView implements ScaleGestureDete
                 "  float match = step(dist, uHueTol) * step(0.20, hsv.y);\n" +
                 "  vec3 faded = mix(vec3(dot(col, vec3(0.299, 0.587, 0.114))), col, 0.35);\n" +
                 "  faded *= 0.75;\n" +
-                "  vec3 hsvGlow = vec3(targetHue, 1.0, clamp(0.6 + 0.8 * hsv.z, 0.0, 1.0));\n" +
+                "  vec3 hsvGlow = vec3(target.x, 1.0, clamp(0.6 + 0.8 * hsv.z, 0.0, 1.0));\n" +
                 "  vec3 K2 = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0).xxx;\n" +
                 "  vec3 p2 = abs(fract(hsvGlow.xxx + vec3(1.0, 2.0 / 3.0, 1.0 / 3.0)) * 6.0 - vec3(3.0));\n" +
                 "  vec3 glow = hsvGlow.z * mix(K2, clamp(p2 - K2, 0.0, 1.0), hsvGlow.y);\n" +
@@ -262,8 +262,12 @@ public class CameraSurfaceView extends GLSurfaceView implements ScaleGestureDete
             surfaceTexture = new SurfaceTexture(texId);
             surfaceTexture.setOnFrameAvailableListener(st -> view.fireFrameAvailable());
 
-            programNormal = buildProgram(VERTEX_SHADER, FRAGMENT_SHADER_NORMAL);
-            programMark = buildProgram(VERTEX_SHADER, FRAGMENT_SHADER_MARK);
+            programNormal = buildProgramSafe(VERTEX_SHADER, FRAGMENT_SHADER_NORMAL);
+            programMark = buildProgramSafe(VERTEX_SHADER, FRAGMENT_SHADER_MARK);
+            if (programMark == 0) {
+                AppLog.e("Markierungs-Shader ungueltig, falle auf Normal-Modus zurueck", null);
+                programMark = programNormal;
+            }
 
             mvpLocN = GLES20.glGetUniformLocation(programNormal, "uMVP");
             stLocN = GLES20.glGetUniformLocation(programNormal, "uSTMatrix");
@@ -357,6 +361,16 @@ public class CameraSurfaceView extends GLSurfaceView implements ScaleGestureDete
 
             GLES20.glDisableVertexAttribArray(aPosLoc);
             GLES20.glDisableVertexAttribArray(aTexLoc);
+        }
+
+        private static int buildProgramSafe(String vsSrc, String fsSrc) {
+            try {
+                int p = buildProgram(vsSrc, fsSrc);
+                return p;
+            } catch (Throwable t) {
+                AppLog.e("Shader-Build fehlgeschlagen: " + t.getMessage(), t);
+                return 0;
+            }
         }
 
         private static int buildProgram(String vsSrc, String fsSrc) {
