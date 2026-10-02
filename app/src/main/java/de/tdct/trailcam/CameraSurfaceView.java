@@ -191,11 +191,11 @@ public class CameraSurfaceView extends GLSurfaceView implements ScaleGestureDete
                 "  float satDiff = abs(hsv.y - target.y);\n" +
                 "  float valDiff = abs(hsv.z - target.z);\n" +
                 "  float dist = hueDiff + 0.30 * satDiff + 0.30 * valDiff;\n" +
-                "  float match = step(dist, uHueTol) * step(0.15, hsv.y);\n" +
+                "  float match = step(dist, uHueTol) * step(0.15, hsv.y) * step(uMinLum, hsv.z);\n" +
                 "  vec3 faded = mix(vec3(dot(col, vec3(0.299, 0.587, 0.114))), col, 0.30);\n" +
                 "  faded *= 0.65;\n" +
                 "  float sat = clamp(hsv.y * 1.6, 0.85, 1.0);\n" +
-                "  float lum = clamp(max(hsv.z, uMinLum) * 1.15, uMinLum, 1.0);\n" +
+                "  float lum = clamp(hsv.z * 1.15 + 0.25, 0.80, 1.0);\n" +
                 "  vec3 glow = hsv2rgb(vec3(hsv.x, sat, lum));\n" +
                 "  glow = mix(glow, vec3(1.0), 0.10);\n" +
                 "  vec3 result = mix(faded, glow, match);\n" +
