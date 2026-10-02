@@ -44,6 +44,7 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
     private TextView thresholdValue;
     private SeekBar minLumSlider;
     private TextView minLumValue;
+    private TextView pickHint;
     private Button btnPickEyedropper;
 
     private CameraDevice camera;
@@ -114,6 +115,7 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
         thresholdValue = findViewById(R.id.threshold_value);
         minLumSlider = findViewById(R.id.minlum_slider);
         minLumValue = findViewById(R.id.minlum_value);
+        pickHint = findViewById(R.id.pick_hint);
 
         surfaceView.setListener(this);
 
@@ -129,9 +131,7 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
             pickMode = !pickMode;
             surfaceView.setPickMode(pickMode);
             updateControls();
-            if (pickMode) {
-                showToast("Farbe im Bild antippen");
-            }
+            updatePickHint();
         });
 
         minLumSlider.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
@@ -176,13 +176,20 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
         float[] hsv = new float[3];
         android.graphics.Color.colorToHSV(android.graphics.Color.rgb(
                 Math.round(r * 255), Math.round(g * 255), Math.round(b * 255)), hsv);
-        int lum = Math.round(hsv[2] * 100f);
+        int lum = Math.round(hsv[2] * 100f) / 2;
         minLumSlider.setProgress(lum);
         minLumValue.setText(String.valueOf(lum));
         surfaceView.getRenderer().setMinLuminance(lum / 100f);
     }
 
+    private void updatePickHint() {
+        if (pickHint != null) {
+            pickHint.setVisibility(pickMode ? android.view.View.VISIBLE : android.view.View.GONE);
+        }
+    }
+
     private void updateControls() {
+        updatePickHint();
         btnMode.setText(markMode ? R.string.btn_mode_normal : R.string.btn_mode_mark);
         btnPickColor.setEnabled(markMode && !pickMode);
         btnPickEyedropper.setEnabled(markMode);
