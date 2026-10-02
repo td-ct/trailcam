@@ -178,10 +178,12 @@ public class CameraSurfaceView extends GLSurfaceView implements ScaleGestureDete
                 "  }\n" +
                 "  vec3 col = texture2D(uTexture, tc).rgb;\n" +
                 "  vec3 hsv = rgb2hsv(col);\n" +
-                "  float targetHue = rgb2hsv(uTargetColor).x;\n" +
-                "  float hueDiff = abs(hsv.x - targetHue);\n" +
+                "  vec3 target = rgb2hsv(uTargetColor);\n" +
+                "  float hueDiff = abs(hsv.x - target.x);\n" +
                 "  if (hueDiff > 0.5) hueDiff = 1.0 - hueDiff;\n" +
-                "  float match = step(hueDiff, uHueTol) * step(0.25, hsv.y);\n" +
+                "  float satDiff = abs(hsv.y - target.y);\n" +
+                "  float dist = hueDiff + 0.35 * satDiff;\n" +
+                "  float match = step(dist, uHueTol) * step(0.20, hsv.y);\n" +
                 "  vec3 faded = mix(vec3(dot(col, vec3(0.299, 0.587, 0.114))), col, 0.35);\n" +
                 "  faded *= 0.75;\n" +
                 "  vec3 hsvGlow = vec3(targetHue, 1.0, clamp(0.6 + 0.8 * hsv.z, 0.0, 1.0));\n" +
@@ -302,13 +304,26 @@ public class CameraSurfaceView extends GLSurfaceView implements ScaleGestureDete
                 pickRequest = null;
                 if (pos != null) {
                     int px = Math.min(surfaceWidth - 1, Math.max(0, (int) (pos[0] * surfaceWidth)));
-                    int py = Math.min(surfaceHeight - 1, Math.max(0, (int) (pos[1] * surfaceHeight)));
-                    ByteBuffer pb = ByteBuffer.allocateDirect(4);
+                    int pyFlipped = Math.min(surfaceHeight - 1,
+                            Math.max(0, (int) (pos[1] * surfaceHeight)));
+                    int py = surfaceHeight - 1 - pyFlipped;
+                    int rw = 5, rh = 5;
+                    int x0 = Math.max(0, Math.min(surfaceWidth - rw, px - rw / 2));
+                    int y0 = Math.max(0, Math.min(surfaceHeight - rh, py - rh / 2));
+                    ByteBuffer pb = ByteBuffer.allocateDirect(rw * rh * 4);
                     pb.order(ByteOrder.nativeOrder());
-                    GLES20.glReadPixels(px, py, 1, 1, GLES20.GL_RGBA, GLES20.GL_UNSIGNED_BYTE, pb);
-                    float r = (pb.get(0) & 0xFF) / 255f;
-                    float g = (pb.get(1) & 0xFF) / 255f;
-                    float b = (pb.get(2) & 0xFF) / 255f;
+                    GLES20.glReadPixels(x0, y0, rw, rh,
+                            GLES20.GL_RGBA, GLES20.GL_UNSIGNED_BYTE, pb);
+                    long rSum = 0, gSum = 0, bSum = 0;
+                    int n = rw * rh;
+                    for (int i = 0; i < n; i++) {
+                        rSum += pb.get(i * 4) & 0xFF;
+                        gSum += pb.get(i * 4 + 1) & 0xFF;
+                        bSum += pb.get(i * 4 + 2) & 0xFF;
+                    }
+                    float r = rSum / (float) (n * 255);
+                    float g = gSum / (float) (n * 255);
+                    float b = bSum / (float) (n * 255);
                     view.fireColorPicked(r, g, b);
                 }
             }
