@@ -33,7 +33,8 @@ import java.util.Collections;
 public class MainActivity extends Activity implements CameraSurfaceView.Listener, AppLog.Listener {
 
     private static final int REQ_PERMISSION = 100;
-    private static final int MAX_PREVIEW_WIDTH = 1920;
+    private static final int MAX_PREVIEW_WIDTH = 1280;
+    private static final int MAX_PREVIEW_HEIGHT = 720;
 
     private CameraSurfaceView surfaceView;
     private Button btnMode;
@@ -53,6 +54,30 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
 
     private int cameraGeneration = 0;
     private boolean cameraStarting = false;
+    private boolean sessionConfigured = false;
+    private int sessionRetryCount = 0;
+    private static final int MAX_SESSION_RETRIES = 3;
+    private final java.lang.Runnable sessionTimeout = new java.lang.Runnable() {
+        @Override
+        public void run() {
+            if (!sessionConfigured && sessionRetryCount < MAX_SESSION_RETRIES) {
+                sessionRetryCount++;
+                AppLog.w("Session-Timeout, Neustart der Kamera (" + sessionRetryCount + "/" + MAX_SESSION_RETRIES + ")");
+                closeCamera();
+                startCamera();
+            }
+        }
+    };
+
+    private void scheduleSessionTimeout(int gen) {
+        android.os.Handler main = new android.os.Handler(getMainLooper());
+        main.postDelayed(sessionTimeout, 4000);
+    }
+
+    private void cancelSessionTimeout() {
+        android.os.Handler main = new android.os.Handler(getMainLooper());
+        main.removeCallbacks(sessionTimeout);
+    }
 
     private float pickedR = 1f, pickedG = 0f, pickedB = 0f;
 
@@ -171,6 +196,7 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
     }
 
     private void closeCamera() {
+        cancelSessionTimeout();
         AppLog.d("closeCamera gen=" + cameraGeneration);
         cameraGeneration++;
         cameraStarting = false;
@@ -194,6 +220,7 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
 
     @SuppressLint("MissingPermission")
     private void startCamera() {
+        sessionRetryCount = 0;
         AppLog.d("startCamera gen=" + cameraGeneration
                 + " starting=" + cameraStarting
                 + " camera=" + (camera != null)
@@ -250,6 +277,7 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
                         largest = s;
                     }
                     if (s.getWidth() <= MAX_PREVIEW_WIDTH
+                            && s.getHeight() <= MAX_PREVIEW_HEIGHT
                             && (best == null
                                 || s.getWidth() * s.getHeight() > best.getWidth() * best.getHeight())) {
                         best = s;
@@ -272,15 +300,6 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
             }
 
             AppLog.d("openCamera id=" + cameraId);
-            Range<Integer>[] fpsRanges = ch.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES);
-            Range<Integer> fps = null;
-            if (fpsRanges != null && fpsRanges.length > 0) {
-                fps = fpsRanges[0];
-                for (Range<Integer> r : fpsRanges) {
-                    if (r.getUpper() > fps.getUpper()) fps = r;
-                }
-            }
-            final Range<Integer> finalFps = fps;
 
             mgr.openCamera(cameraId, new CameraDevice.StateCallback() {
                 @Override
@@ -294,6 +313,8 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
                     try {
                         Surface surface = new Surface(texture);
                         previewSurface = surface;
+                        sessionConfigured = false;
+                        scheduleSessionTimeout(gen);
                         AppLog.d("createCaptureSession");
                         cam.createCaptureSession(Collections.singletonList(surface),
                                 new CameraCaptureSession.StateCallback() {
@@ -310,13 +331,11 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
                                         if (h == null) {
                                             return;
                                         }
+                                        sessionConfigured = true;
                                         try {
                                             CaptureRequest.Builder builder =
                                                     cam.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
                                             builder.addTarget(surface);
-                                            if (finalFps != null) {
-                                                builder.set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, finalFps);
-                                            }
                                             sess.setRepeatingRequest(builder.build(), null, h);
                                             AppLog.i("Preview laeuft");
                                         } catch (Exception e) {
