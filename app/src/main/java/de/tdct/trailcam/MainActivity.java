@@ -93,7 +93,10 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
             {0f, 1f, 1f},
             {0f, 0f, 1f},
             {1f, 0f, 1f},
-            {1f, 1f, 1f},
+            {0.72f, 0.52f, 0.36f},
+            {0.80f, 0.66f, 0.50f},
+            {0.62f, 0.45f, 0.32f},
+            {0.87f, 0.72f, 0.53f},
     };
 
     @Override
@@ -184,24 +187,16 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
             colorPreview.setBackgroundColor(android.graphics.Color.rgb(
                     Math.round(r * 255), Math.round(g * 255), Math.round(b * 255)));
             updateControls();
-            showToast("Farbe \u00fcbernommen");
         });
     }
 
     private void showColorPicker() {
-        String[] names = {"Pipette (Farbe im Bild w\u00e4hlen)",
-                "Rot", "Orange", "Gelb", "Gr\u00fcn", "Cyan", "Blau", "Magenta"};
+        String[] names = {"Rot", "Orange", "Gelb", "Gr\u00fcn", "Cyan", "Blau", "Magenta",
+                "Hellbraun", "Beige", "Dunkelbraun", "Sepia"};
         new AlertDialog.Builder(this)
                 .setTitle(R.string.select_color)
                 .setItems(names, (d, which) -> {
-                    if (which == 0) {
-                        pickMode = true;
-                        surfaceView.setPickMode(true);
-                        updateControls();
-                        showToast("Farbe im Bild antippen");
-                        return;
-                    }
-                    float[] c = PRESET_COLORS[which - 1];
+                    float[] c = PRESET_COLORS[which];
                     pickedR = c[0]; pickedG = c[1]; pickedB = c[2];
                     surfaceView.getRenderer().setTargetColor(pickedR, pickedG, pickedB);
                     int color = android.graphics.Color.rgb(
