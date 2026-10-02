@@ -162,16 +162,10 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
         runOnUiThread(() -> {
             pickMode = false;
             surfaceView.setPickMode(false);
-            int color = android.graphics.Color.rgb(
-                    Math.round(r * 255), Math.round(g * 255), Math.round(b * 255));
-            float[] hsv = new float[3];
-            android.graphics.Color.colorToHSV(color, hsv);
-            int pure = android.graphics.Color.HSVToColor(new float[]{hsv[0], 1f, 1f});
-            pickedR = android.graphics.Color.red(pure) / 255f;
-            pickedG = android.graphics.Color.green(pure) / 255f;
-            pickedB = android.graphics.Color.blue(pure) / 255f;
+            pickedR = r; pickedG = g; pickedB = b;
             surfaceView.getRenderer().setTargetColor(pickedR, pickedG, pickedB);
-            colorPreview.setBackgroundColor(pure);
+            colorPreview.setBackgroundColor(android.graphics.Color.rgb(
+                    Math.round(r * 255), Math.round(g * 255), Math.round(b * 255)));
             updateControls();
             showToast("Farbe \u00fcbernommen");
         });

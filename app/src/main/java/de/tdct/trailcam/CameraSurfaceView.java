@@ -188,13 +188,15 @@ public class CameraSurfaceView extends GLSurfaceView implements ScaleGestureDete
                 "  float hueDiff = abs(hsv.x - target.x);\n" +
                 "  if (hueDiff > 0.5) hueDiff = 1.0 - hueDiff;\n" +
                 "  float satDiff = abs(hsv.y - target.y);\n" +
-                "  float dist = hueDiff + 0.35 * satDiff;\n" +
-                "  float match = step(dist, uHueTol) * step(0.20, hsv.y);\n" +
+                "  float valDiff = abs(hsv.z - target.z);\n" +
+                "  float dist = hueDiff + 0.30 * satDiff + 0.30 * valDiff;\n" +
+                "  float match = step(dist, uHueTol) * step(0.15, hsv.y);\n" +
                 "  vec3 faded = mix(vec3(dot(col, vec3(0.299, 0.587, 0.114))), col, 0.30);\n" +
                 "  faded *= 0.65;\n" +
-                "  float lum = clamp(0.75 + 0.5 * hsv.z, 0.75, 1.0);\n" +
-                "  vec3 glow = hsv2rgb(vec3(target.x, 1.0, lum));\n" +
-                "  glow = mix(glow, vec3(1.0), 0.12);\n" +
+                "  float lum = clamp(0.80 + 0.4 * hsv.z, 0.80, 1.0);\n" +
+                "  float sat = max(target.y, 0.75);\n" +
+                "  vec3 glow = hsv2rgb(vec3(target.x, sat, lum));\n" +
+                "  glow = mix(glow, vec3(1.0), 0.10);\n" +
                 "  vec3 result = mix(faded, glow, match);\n" +
                 "  gl_FragColor = vec4(result, 1.0);\n" +
                 "}\n";
@@ -323,17 +325,32 @@ public class CameraSurfaceView extends GLSurfaceView implements ScaleGestureDete
                     pb.order(ByteOrder.nativeOrder());
                     GLES20.glReadPixels(x0, y0, rw, rh,
                             GLES20.GL_RGBA, GLES20.GL_UNSIGNED_BYTE, pb);
-                    long rSum = 0, gSum = 0, bSum = 0;
                     int n = rw * rh;
+                    double sinSum = 0, cosSum = 0, satSum = 0, valSum = 0;
+                    float[] hsvPx = new float[3];
                     for (int i = 0; i < n; i++) {
-                        rSum += pb.get(i * 4) & 0xFF;
-                        gSum += pb.get(i * 4 + 1) & 0xFF;
-                        bSum += pb.get(i * 4 + 2) & 0xFF;
+                        int r8 = pb.get(i * 4) & 0xFF;
+                        int g8 = pb.get(i * 4 + 1) & 0xFF;
+                        int b8 = pb.get(i * 4 + 2) & 0xFF;
+                        android.graphics.Color.colorToHSV(
+                                android.graphics.Color.rgb(r8, g8, b8), hsvPx);
+                        double ang = hsvPx[0] / 360f * 2f * Math.PI;
+                        sinSum += Math.sin(ang);
+                        cosSum += Math.cos(ang);
+                        satSum += hsvPx[1];
+                        valSum += hsvPx[2];
                     }
-                    float r = rSum / (float) (n * 255);
-                    float g = gSum / (float) (n * 255);
-                    float b = bSum / (float) (n * 255);
-                    view.fireColorPicked(r, g, b);
+                    double meanAng = Math.atan2(sinSum / n, cosSum / n);
+                    if (meanAng < 0) meanAng += 2f * Math.PI;
+                    float meanHue = (float) (meanAng / (2f * Math.PI) * 360f);
+                    float meanSat = (float) (satSum / n);
+                    float meanVal = (float) (valSum / n);
+                    int picked = android.graphics.Color.HSVToColor(
+                            new float[]{meanHue, meanSat, Math.max(meanVal, 0.6f)});
+                    view.fireColorPicked(
+                            android.graphics.Color.red(picked) / 255f,
+                            android.graphics.Color.green(picked) / 255f,
+                            android.graphics.Color.blue(picked) / 255f);
                 }
             }
         }
