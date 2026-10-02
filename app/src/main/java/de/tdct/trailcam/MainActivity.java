@@ -20,6 +20,10 @@ import android.os.HandlerThread;
 import android.util.Range;
 import android.util.Size;
 import android.view.Surface;
+import android.net.Uri;
+import android.content.Intent;
+import android.widget.ImageButton;
+import android.widget.PopupMenu;
 import android.widget.Button;
 import android.widget.SeekBar;
 import android.widget.TextView;
@@ -111,6 +115,9 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
         btnMode = findViewById(R.id.btn_mode);
         btnPickColor = findViewById(R.id.btn_pick_color);
         colorPreview = findViewById(R.id.color_preview);
+        ImageButton btnMenu = findViewById(R.id.btn_menu);
+        btnMenu.setOnClickListener(v -> showMenu());
+
         thresholdSlider = findViewById(R.id.threshold_slider);
         thresholdValue = findViewById(R.id.threshold_value);
         minLumSlider = findViewById(R.id.minlum_slider);
@@ -206,6 +213,42 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
             applyColor(r, g, b);
             updateControls();
         });
+    }
+
+    private void showMenu() {
+        PopupMenu popup = new PopupMenu(this, findViewById(R.id.btn_menu));
+        popup.getMenu().add("Uber");
+        popup.getMenu().add("Spenden");
+        popup.setOnMenuItemClickListener(item -> {
+            String title = String.valueOf(item.getTitle());
+            if ("Uber".equals(title)) {
+                startActivity(new Intent(this, SplashActivity.class));
+                return true;
+            }
+            if ("Spenden".equals(title)) {
+                showDonate();
+                return true;
+            }
+            return false;
+        });
+        popup.show();
+    }
+
+    private void showDonate() {
+        new AlertDialog.Builder(this)
+                .setTitle("Spenden")
+                .setMessage("Unterstuetze die Entwicklung von TrailCam mit einer kleinen Spende uber PayPal.")
+                .setPositiveButton("Mit PayPal spenden", (d, w) -> {
+                    try {
+                        String url = "https://www.paypal.com/donate/?business=timodamm%40googlemail.com&no_recurring=0&item_name=TrailCam%20Spende&currency_code=EUR";
+                        startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
+                    } catch (Exception e) {
+                        AppLog.w("PayPal-Link konnte nicht geoeffnet werden");
+                        showToast("PayPal konnte nicht geoeffnet werden");
+                    }
+                })
+                .setNegativeButton("Abbrechen", null)
+                .show();
     }
 
     private void showColorPicker() {
