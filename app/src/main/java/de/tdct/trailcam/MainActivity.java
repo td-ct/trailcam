@@ -168,6 +168,20 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
         }
     }
 
+    private void applyColor(float r, float g, float b) {
+        pickedR = r; pickedG = g; pickedB = b;
+        surfaceView.getRenderer().setTargetColor(r, g, b);
+        colorPreview.setBackgroundColor(android.graphics.Color.rgb(
+                Math.round(r * 255), Math.round(g * 255), Math.round(b * 255)));
+        float[] hsv = new float[3];
+        android.graphics.Color.colorToHSV(android.graphics.Color.rgb(
+                Math.round(r * 255), Math.round(g * 255), Math.round(b * 255)), hsv);
+        int lum = Math.round(hsv[2] * 100f);
+        minLumSlider.setProgress(lum);
+        minLumValue.setText(String.valueOf(lum));
+        surfaceView.getRenderer().setMinLuminance(lum / 100f);
+    }
+
     private void updateControls() {
         btnMode.setText(markMode ? R.string.btn_mode_normal : R.string.btn_mode_mark);
         btnPickColor.setEnabled(markMode && !pickMode);
@@ -182,10 +196,7 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
         runOnUiThread(() -> {
             pickMode = false;
             surfaceView.setPickMode(false);
-            pickedR = r; pickedG = g; pickedB = b;
-            surfaceView.getRenderer().setTargetColor(pickedR, pickedG, pickedB);
-            colorPreview.setBackgroundColor(android.graphics.Color.rgb(
-                    Math.round(r * 255), Math.round(g * 255), Math.round(b * 255)));
+            applyColor(r, g, b);
             updateControls();
         });
     }
@@ -197,11 +208,7 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
                 .setTitle(R.string.select_color)
                 .setItems(names, (d, which) -> {
                     float[] c = PRESET_COLORS[which];
-                    pickedR = c[0]; pickedG = c[1]; pickedB = c[2];
-                    surfaceView.getRenderer().setTargetColor(pickedR, pickedG, pickedB);
-                    int color = android.graphics.Color.rgb(
-                            (int) (pickedR * 255), (int) (pickedG * 255), (int) (pickedB * 255));
-                    colorPreview.setBackgroundColor(color);
+                    applyColor(c[0], c[1], c[2]);
                 })
                 .show();
     }
