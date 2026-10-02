@@ -30,7 +30,7 @@ import androidx.core.app.ActivityCompat;
 
 import java.util.Collections;
 
-public class MainActivity extends Activity implements CameraSurfaceView.Listener {
+public class MainActivity extends Activity implements CameraSurfaceView.Listener, AppLog.Listener {
 
     private static final int REQ_PERMISSION = 100;
     private static final int MAX_PREVIEW_WIDTH = 1920;
@@ -41,6 +41,7 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
     private android.view.View colorPreview;
     private SeekBar thresholdSlider;
     private TextView thresholdValue;
+    private TextView logOverlay;
 
     private CameraDevice camera;
     private CameraCaptureSession session;
@@ -71,7 +72,11 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
+        AppLog.init(getApplication());
+        AppLog.setListener(this);
+        AppLog.d("onCreate");
         surfaceView = findViewById(R.id.surface_view);
+        logOverlay = findViewById(R.id.log_overlay);
         btnMode = findViewById(R.id.btn_mode);
         btnPickColor = findViewById(R.id.btn_pick_color);
         colorPreview = findViewById(R.id.color_preview);
@@ -108,6 +113,15 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
         }
     }
 
+    @Override
+    public void onLog(String line) {
+        runOnUiThread(() -> {
+            if (logOverlay != null) {
+                logOverlay.setText(AppLog.getLog());
+            }
+        });
+    }
+
     private void updateControls() {
         btnMode.setText(markMode ? R.string.btn_mode_normal : R.string.btn_mode_mark);
         btnPickColor.setEnabled(markMode);
@@ -131,10 +145,12 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
 
     @Override
     public void onSurfaceCreated(SurfaceTexture texture, int texId) {
+        AppLog.d("onSurfaceCreated texId=" + texId);
         runOnUiThread(() -> {
             boolean textureChanged = (texture != glSurfaceTexture);
             glSurfaceTexture = texture;
             if (textureChanged) {
+                AppLog.d("GL texture changed -> restart camera");
                 closeCamera();
                 startCamera();
             }
@@ -155,6 +171,7 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
     }
 
     private void closeCamera() {
+        AppLog.d("closeCamera gen=" + cameraGeneration);
         cameraGeneration++;
         cameraStarting = false;
         CameraCaptureSession s = session;
@@ -177,6 +194,11 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
 
     @SuppressLint("MissingPermission")
     private void startCamera() {
+        AppLog.d("startCamera gen=" + cameraGeneration
+                + " starting=" + cameraStarting
+                + " camera=" + (camera != null)
+                + " session=" + (session != null)
+                + " texture=" + (glSurfaceTexture != null));
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
                 != PackageManager.PERMISSION_GRANTED) {
             return;
@@ -212,6 +234,7 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
             }
             if (cameraId == null) {
                 cameraStarting = false;
+                AppLog.w("keine Kamera gefunden");
                 showToast("Keine Kamera gefunden");
                 return;
             }
@@ -241,11 +264,14 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
                 showToast("Keine Kamera-Aufl\u00f6sung verf\u00fcgbar");
                 return;
             }
+            AppLog.d("preview size=" + best);
             try {
                 texture.setDefaultBufferSize(best.getWidth(), best.getHeight());
-            } catch (Exception ignored) {
+            } catch (Exception e) {
+                AppLog.w("setDefaultBufferSize failed: " + e);
             }
 
+            AppLog.d("openCamera id=" + cameraId);
             Range<Integer>[] fpsRanges = ch.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES);
             Range<Integer> fps = null;
             if (fpsRanges != null && fpsRanges.length > 0) {
@@ -259,6 +285,7 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
             mgr.openCamera(cameraId, new CameraDevice.StateCallback() {
                 @Override
                 public void onOpened(@NonNull CameraDevice cam) {
+                    AppLog.d("camera onOpened gen=" + gen);
                     if (gen != cameraGeneration) {
                         try { cam.close(); } catch (Exception ignored) { }
                         return;
@@ -267,10 +294,12 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
                     try {
                         Surface surface = new Surface(texture);
                         previewSurface = surface;
+                        AppLog.d("createCaptureSession");
                         cam.createCaptureSession(Collections.singletonList(surface),
                                 new CameraCaptureSession.StateCallback() {
                                     @Override
                                     public void onConfigured(@NonNull CameraCaptureSession sess) {
+                                        AppLog.d("session onConfigured gen=" + gen);
                                         if (gen != cameraGeneration || camera == null) {
                                             try { sess.close(); } catch (Exception ignored) { }
                                             return;
@@ -289,13 +318,16 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
                                                 builder.set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, finalFps);
                                             }
                                             sess.setRepeatingRequest(builder.build(), null, h);
+                                            AppLog.i("Preview laeuft");
                                         } catch (Exception e) {
+                                            AppLog.e("setRepeatingRequest failed", e);
                                             closeCameraQuietly();
                                         }
                                     }
 
                                     @Override
                                     public void onConfigureFailed(@NonNull CameraCaptureSession sess) {
+                                        AppLog.e("onConfigureFailed gen=" + gen, null);
                                         if (gen == cameraGeneration) {
                                             cameraStarting = false;
                                             showToast("Kamera-Session fehlgeschlagen");
@@ -304,6 +336,7 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
                                     }
                                 }, bgHandler);
                     } catch (Exception e) {
+                        AppLog.e("createCaptureSession failed", e);
                         cameraStarting = false;
                         try { cam.close(); } catch (Exception ignored) { }
                     }
@@ -311,6 +344,7 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
 
                 @Override
                 public void onDisconnected(@NonNull CameraDevice cam) {
+                    AppLog.w("camera onDisconnected");
                     try { cam.close(); } catch (Exception ignored) { }
                     if (gen == cameraGeneration) {
                         camera = null;
@@ -321,6 +355,7 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
 
                 @Override
                 public void onError(@NonNull CameraDevice cam, int error) {
+                    AppLog.e("camera onError code=" + error, null);
                     try { cam.close(); } catch (Exception ignored) { }
                     if (gen == cameraGeneration) {
                         camera = null;
@@ -332,6 +367,7 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
             }, bgHandler);
         } catch (Exception e) {
             cameraStarting = false;
+            AppLog.e("openCamera failed", e);
             showToast("Kamera konnte nicht ge\u00f6ffnet werden");
         }
     }
@@ -344,6 +380,7 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
     }
 
     private void showToast(String msg) {
+        AppLog.w("Toast: " + msg);
         runOnUiThread(() ->
                 Toast.makeText(MainActivity.this, msg, Toast.LENGTH_LONG).show());
     }
@@ -351,6 +388,7 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
     @Override
     protected void onResume() {
         super.onResume();
+        AppLog.d("onResume");
         ensureBgThread();
         surfaceView.onResume();
         if (glSurfaceTexture != null) {
@@ -360,6 +398,7 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
 
     @Override
     protected void onPause() {
+        AppLog.d("onPause");
         closeCamera();
         surfaceView.onPause();
         if (bgThread != null) {
@@ -374,6 +413,8 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
     @Override
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions,
                                            @NonNull int[] grantResults) {
+        AppLog.d("permission result granted="
+                + (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED));
         if (requestCode == REQ_PERMISSION
                 && grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
             startCamera();

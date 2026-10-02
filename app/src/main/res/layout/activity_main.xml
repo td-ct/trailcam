@@ -9,6 +9,18 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
+    <TextView
+        android:id="@+id/log_overlay"
+        android:layout_width="match_parent"
+        android:layout_height="160dp"
+        android:layout_gravity="top"
+        android:background="#AA000000"
+        android:fontFamily="monospace"
+        android:padding="4dp"
+        android:scrollbars="vertical"
+        android:textColor="#FF33FF33"
+        android:textSize="10sp" />
+
     <LinearLayout
         android:id="@+id/control_panel"
         android:layout_width="match_parent"
