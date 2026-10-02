@@ -162,6 +162,12 @@ public class CameraSurfaceView extends GLSurfaceView implements ScaleGestureDete
                 "uniform vec3 uTargetColor;\n" +
                 "uniform float uHueTol;\n" +
                 "\n" +
+                "vec3 hsv2rgb(vec3 c) {\n" +
+                "  vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);\n" +
+                "  vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);\n" +
+                "  return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);\n" +
+                "}\n" +
+                "\n" +
                 "vec3 rgb2hsv(vec3 c) {\n" +
                 "  vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);\n" +
                 "  vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);\n" +
@@ -184,12 +190,11 @@ public class CameraSurfaceView extends GLSurfaceView implements ScaleGestureDete
                 "  float satDiff = abs(hsv.y - target.y);\n" +
                 "  float dist = hueDiff + 0.35 * satDiff;\n" +
                 "  float match = step(dist, uHueTol) * step(0.20, hsv.y);\n" +
-                "  vec3 faded = mix(vec3(dot(col, vec3(0.299, 0.587, 0.114))), col, 0.35);\n" +
-                "  faded *= 0.75;\n" +
-                "  vec3 hsvGlow = vec3(target.x, 1.0, clamp(0.6 + 0.8 * hsv.z, 0.0, 1.0));\n" +
-                "  vec3 K2 = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0).xxx;\n" +
-                "  vec3 p2 = abs(fract(hsvGlow.xxx + vec3(1.0, 2.0 / 3.0, 1.0 / 3.0)) * 6.0 - vec3(3.0));\n" +
-                "  vec3 glow = hsvGlow.z * mix(K2, clamp(p2 - K2, 0.0, 1.0), hsvGlow.y);\n" +
+                "  vec3 faded = mix(vec3(dot(col, vec3(0.299, 0.587, 0.114))), col, 0.30);\n" +
+                "  faded *= 0.65;\n" +
+                "  float lum = clamp(0.75 + 0.5 * hsv.z, 0.75, 1.0);\n" +
+                "  vec3 glow = hsv2rgb(vec3(target.x, 1.0, lum));\n" +
+                "  glow = mix(glow, vec3(1.0), 0.12);\n" +
                 "  vec3 result = mix(faded, glow, match);\n" +
                 "  gl_FragColor = vec4(result, 1.0);\n" +
                 "}\n";
