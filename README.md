@@ -39,3 +39,11 @@ Release-Signieren: `TRAILCAM_KEYSTORE`, `TRAILCAM_STORE_PASS`, `TRAILCAM_KEY_ALI
 
 Die APK (`app-release.apk`) auf das Smartphone übertragen und installieren
 ("Unbekannte Quellen" muss erlaubt sein). Mindestens Android 7.0 (API 24).
+
+## Release-Signierung
+
+Der CI-Workflow signiert Release-APKs automatisch. Der Signatur-Keystore wird als
+Base64 in den GitHub-Actions-Secrets `CI_KEYSTORE_BASE64`, `CI_STORE_PASS`,
+`CI_KEY_ALIAS`, `CI_KEY_PASS` konfiguriert (ein Backup des Keystores liegt sicher
+außerhalb des Repos). Fehlen die Secrets, erzeugt die CI einen temporären
+Key -- dann sind keine Updates ueber bestehende Installationen moeglich.
