@@ -1,0 +1,82 @@
+name: Build release APK
+
+on:
+  push:
+    branches:
+      - vibe/hsv-range-sliders-3133ef
+      - main
+    paths-ignore:
+      - 'apk/**'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: '8.7'
+
+      - name: Prepare signing keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.CI_KEYSTORE_BASE64 }}
+          STORE_PASS: ${{ secrets.CI_STORE_PASS }}
+          KEY_ALIAS: ${{ secrets.CI_KEY_ALIAS }}
+          KEY_PASS: ${{ secrets.CI_KEY_PASS }}
+        run: |
+          KS="$RUNNER_TEMP/release.keystore"
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > "$KS"
+            echo "Nutze Keystore aus CI_KEYSTORE_BASE64"
+          else
+            keytool -genkeypair -keystore "$KS" \
+              -alias trailcam -keyalg RSA -keysize 2048 -validity 10000 \
+              -storepass trailcamci -keypass trailcamci \
+              -dname "CN=TrailCam CI, OU=TrailCam, O=td-ct, C=DE"
+            echo "Kein Secret gesetzt, nutze generierten CI-Keystore"
+          fi
+          echo "TRAILCAM_KEYSTORE=$KS" >> "$GITHUB_ENV"
+          echo "TRAILCAM_STORE_PASS=${STORE_PASS:-trailcamci}" >> "$GITHUB_ENV"
+          echo "TRAILCAM_KEY_ALIAS=${KEY_ALIAS:-trailcam}" >> "$GITHUB_ENV"
+          echo "TRAILCAM_KEY_PASS=${KEY_PASS:-trailcamci}" >> "$GITHUB_ENV"
+
+      - name: Build release APK
+        run: gradle assembleRelease --no-daemon
+
+      - name: Collect APK
+        run: |
+          mkdir -p apk
+          APK=$(ls app/build/outputs/apk/release/*.apk | head -1)
+          VERSION=$(grep -o 'versionName "[^"]*"' app/build.gradle | cut -d'"' -f2)
+          cp "$APK" "apk/TrailCam-v${VERSION}-release.apk"
+          echo "APK_PATH=apk/TrailCam-v${VERSION}-release.apk" >> "$GITHUB_ENV"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+
+      - name: Verify APK signature
+        run: |
+          BT=$(ls -d "$ANDROID_HOME/build-tools/"*/ | sort -V | tail -1)
+          "$BT/apksigner" verify --print-certs "$APK_PATH"
+
+      - name: Commit APK
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add "$APK_PATH"
+          if git diff --cached --quiet; then
+            echo "Keine APK-Änderungen"
+            exit 0
+          fi
+          git commit -m "APK v${VERSION} [skip ci]"
+          git push
