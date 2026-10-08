@@ -44,11 +44,14 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
     private Button btnMode;
     private Button btnPickColor;
     private android.view.View colorPreview;
-    private SeekBar thresholdSlider;
-    private TextView thresholdValue;
-    private SeekBar minLumSlider;
-    private TextView minLumValue;
+    private SeekBar hueSlider;
+    private TextView hueValue;
+    private RangeSeekBar satRange;
+    private TextView satValue;
+    private RangeSeekBar valRange;
+    private TextView valValue;
     private TextView pickHint;
+    private PickOverlayView pickOverlay;
     private Button btnPickEyedropper;
 
     private CameraDevice camera;
@@ -118,11 +121,14 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
         ImageButton btnMenu = findViewById(R.id.btn_menu);
         btnMenu.setOnClickListener(v -> showMenu());
 
-        thresholdSlider = findViewById(R.id.threshold_slider);
-        thresholdValue = findViewById(R.id.threshold_value);
-        minLumSlider = findViewById(R.id.minlum_slider);
-        minLumValue = findViewById(R.id.minlum_value);
+        hueSlider = findViewById(R.id.hue_slider);
+        hueValue = findViewById(R.id.hue_value);
+        satRange = findViewById(R.id.sat_range);
+        satValue = findViewById(R.id.sat_value);
+        valRange = findViewById(R.id.val_range);
+        valValue = findViewById(R.id.val_value);
         pickHint = findViewById(R.id.pick_hint);
+        pickOverlay = findViewById(R.id.pick_overlay);
 
         surfaceView.setListener(this);
 
@@ -137,35 +143,39 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
         btnPickEyedropper.setOnClickListener(v -> {
             pickMode = !pickMode;
             surfaceView.setPickMode(pickMode);
+            surfaceView.getRenderer().setPickPreview(pickMode && markMode);
+            if (pickMode) pickOverlay.show(-1f, -1f);
+            pickOverlay.setVisibility(pickMode ? android.view.View.VISIBLE : android.view.View.GONE);
             updateControls();
             updatePickHint();
         });
 
-        minLumSlider.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+        hueSlider.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                minLumValue.setText(String.valueOf(progress));
-                surfaceView.getRenderer().setMinLuminance(progress / 100f);
+                hueValue.setText(progress + "\u00b0");
+                surfaceView.getRenderer().setHueToleranceDeg(progress);
             }
 
             @Override public void onStartTrackingTouch(SeekBar seekBar) { }
             @Override public void onStopTrackingTouch(SeekBar seekBar) { }
         });
 
-        thresholdSlider.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-            @Override
-            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                float t = (progress / 100f) * 0.5f;
-                thresholdValue.setText(String.valueOf(progress));
-                surfaceView.getRenderer().setHueTolerance(t);
-            }
-
-            @Override public void onStartTrackingTouch(SeekBar seekBar) { }
-            @Override public void onStopTrackingTouch(SeekBar seekBar) { }
+        satRange.setOnRangeChangeListener((min, max) -> {
+            satValue.setText(fmtPct(min) + "-" + fmtPct(max) + "%");
+            surfaceView.getRenderer().setSatRange(min, max);
         });
 
-        surfaceView.getRenderer().setHueTolerance((thresholdSlider.getProgress() / 100f) * 0.5f);
-        surfaceView.getRenderer().setMinLuminance(minLumSlider.getProgress() / 100f);
+        valRange.setOnRangeChangeListener((min, max) -> {
+            valValue.setText(fmtPct(min) + "-" + fmtPct(max) + "%");
+            surfaceView.getRenderer().setValRange(min, max);
+        });
+
+        surfaceView.getRenderer().setHueToleranceDeg(hueSlider.getProgress());
+        satRange.setValues(0f, 1f);
+        valRange.setValues(0f, 1f);
+        surfaceView.getRenderer().setSatRange(0f, 1f);
+        surfaceView.getRenderer().setValRange(0f, 1f);
 
         updateControls();
 
@@ -175,18 +185,15 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
         }
     }
 
+    private static String fmtPct(float v) {
+        return String.valueOf(Math.round(v * 100f));
+    }
+
     private void applyColor(float r, float g, float b) {
         pickedR = r; pickedG = g; pickedB = b;
         surfaceView.getRenderer().setTargetColor(r, g, b);
         colorPreview.setBackgroundColor(android.graphics.Color.rgb(
                 Math.round(r * 255), Math.round(g * 255), Math.round(b * 255)));
-        float[] hsv = new float[3];
-        android.graphics.Color.colorToHSV(android.graphics.Color.rgb(
-                Math.round(r * 255), Math.round(g * 255), Math.round(b * 255)), hsv);
-        int lum = Math.round(hsv[2] * 100f) / 2;
-        minLumSlider.setProgress(lum);
-        minLumValue.setText(String.valueOf(lum));
-        surfaceView.getRenderer().setMinLuminance(lum / 100f);
     }
 
     private void updatePickHint() {
@@ -201,8 +208,10 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
         btnPickColor.setEnabled(markMode && !pickMode);
         btnPickEyedropper.setEnabled(markMode);
         btnPickEyedropper.setText(pickMode ? "Pipette aktiv" : "Pipette");
-        thresholdSlider.setEnabled(markMode);
-        minLumSlider.setEnabled(markMode);
+        hueSlider.setEnabled(markMode);
+        satRange.setRangeEnabled(markMode);
+        valRange.setRangeEnabled(markMode);
+        surfaceView.getRenderer().setPickPreview(pickMode && markMode);
     }
 
     @Override
@@ -210,9 +219,21 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
         runOnUiThread(() -> {
             pickMode = false;
             surfaceView.setPickMode(false);
+            pickOverlay.hide();
+            pickOverlay.setVisibility(android.view.View.GONE);
             applyColor(r, g, b);
             updateControls();
         });
+    }
+
+    @Override
+    public void onPickPointer(float x, float y) {
+        runOnUiThread(() -> pickOverlay.show(x, y));
+    }
+
+    @Override
+    public void onPickPointerGone() {
+        runOnUiThread(() -> pickOverlay.show(-1f, -1f));
     }
 
     private void showMenu() {

@@ -23,6 +23,8 @@ public class CameraSurfaceView extends GLSurfaceView implements ScaleGestureDete
         void onSurfaceCreated(SurfaceTexture texture, int texId);
         void onFrameAvailable();
         void onColorPicked(float r, float g, float b);
+        default void onPickPointer(float x, float y) { }
+        default void onPickPointerGone() { }
     }
 
     private static final float MIN_ZOOM = 1.0f;
@@ -80,6 +82,14 @@ public class CameraSurfaceView extends GLSurfaceView implements ScaleGestureDete
         if (listener != null) listener.onColorPicked(r, g, b);
     }
 
+    void firePickPointer(float x, float y) {
+        if (listener != null) listener.onPickPointer(x, y);
+    }
+
+    void firePickPointerGone() {
+        if (listener != null) listener.onPickPointerGone();
+    }
+
     @Override
     public boolean onTouchEvent(MotionEvent event) {
         if (event.getPointerCount() >= 2) {
@@ -89,14 +99,27 @@ public class CameraSurfaceView extends GLSurfaceView implements ScaleGestureDete
             multiTouch = false;
         }
         scaleDetector.onTouchEvent(event);
-        if (pickMode
-                && !multiTouch
-                && event.getActionMasked() == MotionEvent.ACTION_UP
-                && pendingPick.get() == null) {
-            float xNorm = event.getX() / Math.max(1f, getWidth());
-            float yNorm = event.getY() / Math.max(1f, getHeight());
-            pendingPick.set(new float[]{xNorm, yNorm});
-            queueEvent(() -> renderer.requestPick(pendingPick));
+        if (pickMode && !multiTouch) {
+            switch (event.getActionMasked()) {
+                case MotionEvent.ACTION_DOWN:
+                case MotionEvent.ACTION_MOVE:
+                    firePickPointer(event.getX(), event.getY());
+                    break;
+                case MotionEvent.ACTION_UP:
+                    firePickPointerGone();
+                    if (pendingPick.get() == null) {
+                        float xNorm = event.getX() / Math.max(1f, getWidth());
+                        float yNorm = event.getY() / Math.max(1f, getHeight());
+                        pendingPick.set(new float[]{xNorm, yNorm});
+                        queueEvent(() -> renderer.requestPick(pendingPick));
+                    }
+                    break;
+                case MotionEvent.ACTION_CANCEL:
+                    firePickPointerGone();
+                    break;
+                default:
+                    break;
+            }
         }
         return true;
     }
@@ -159,9 +182,12 @@ public class CameraSurfaceView extends GLSurfaceView implements ScaleGestureDete
                 "varying vec2 vTexCoord;\n" +
                 "uniform samplerExternalOES uTexture;\n" +
                 "uniform float uZoom;\n" +
-                "uniform vec3 uTargetColor;\n" +
+                "uniform vec3 uTargetHSV;\n" +
                 "uniform float uHueTol;\n" +
-                "uniform float uMinLum;\n" +
+                "uniform float uSatMin;\n" +
+                "uniform float uSatMax;\n" +
+                "uniform float uValMin;\n" +
+                "uniform float uValMax;\n" +
                 "\n" +
                 "vec3 hsv2rgb(vec3 c) {\n" +
                 "  vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);\n" +
@@ -170,9 +196,12 @@ public class CameraSurfaceView extends GLSurfaceView implements ScaleGestureDete
                 "}\n" +
                 "\n" +
                 "vec3 rgb2hsv(vec3 c) {\n" +
-                "  vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);\n" +
-                "  vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);\n" +
-                "  return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);\n" +
+                "  vec4 K = vec4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0);\n" +
+                "  vec4 p = mix(vec4(c.bg, K.wz), vec4(c.gb, K.xy), step(c.b, c.g));\n" +
+                "  vec4 q = mix(vec4(p.xyw, c.r), vec4(c.r, p.yzx), step(p.x, c.r));\n" +
+                "  float d = q.x - min(q.w, q.y);\n" +
+                "  float e = 1.0e-10;\n" +
+                "  return vec3(abs(q.z + (q.w - q.y) / (6.0 * d + e)), d / (q.x + e), q.x);\n" +
                 "}\n" +
                 "\n" +
                 "void main() {\n" +
@@ -185,13 +214,11 @@ public class CameraSurfaceView extends GLSurfaceView implements ScaleGestureDete
                 "  }\n" +
                 "  vec3 col = texture2D(uTexture, tc).rgb;\n" +
                 "  vec3 hsv = rgb2hsv(col);\n" +
-                "  vec3 target = rgb2hsv(uTargetColor);\n" +
-                "  float hueDiff = abs(hsv.x - target.x);\n" +
+                "  float hueDiff = abs(hsv.x - uTargetHSV.x);\n" +
                 "  if (hueDiff > 0.5) hueDiff = 1.0 - hueDiff;\n" +
-                "  float satDiff = abs(hsv.y - target.y);\n" +
-                "  float valDiff = abs(hsv.z - target.z);\n" +
-                "  float dist = hueDiff + 0.30 * satDiff + 0.30 * valDiff;\n" +
-                "  float match = step(dist, uHueTol) * step(0.15, hsv.y) * step(uMinLum, hsv.z);\n" +
+                "  float match = step(hueDiff, uHueTol)\n" +
+                "      * step(uSatMin, hsv.y) * step(hsv.y, uSatMax)\n" +
+                "      * step(uValMin, hsv.z) * step(hsv.z, uValMax);\n" +
                 "  vec3 faded = mix(vec3(dot(col, vec3(0.299, 0.587, 0.114))), col, 0.30);\n" +
                 "  faded *= 0.65;\n" +
                 "  float sat = clamp(hsv.y * 1.6, 0.85, 1.0);\n" +
@@ -207,7 +234,8 @@ public class CameraSurfaceView extends GLSurfaceView implements ScaleGestureDete
         private int programMark;
         private int aPosLoc, aTexLoc;
         private int mvpLocN, stLocN, zoomLocN;
-        private int mvpLocM, stLocM, zoomLocM, colorLocM, tolLocM, minLumLocM;
+        private int mvpLocM, stLocM, zoomLocM, hsvLocM, tolLocM;
+        private int satMinLocM, satMaxLocM, valMinLocM, valMaxLocM;
         private int texId;
         private SurfaceTexture surfaceTexture;
         private float[] mvp = new float[16];
@@ -215,11 +243,12 @@ public class CameraSurfaceView extends GLSurfaceView implements ScaleGestureDete
         private final FloatBuffer vertexBuffer;
 
         private volatile boolean markMode = false;
-        private volatile boolean picking = false;
+        private volatile boolean pickPreview = false;
         private volatile float zoom = 1.0f;
-        private volatile float[] targetColor = {1f, 0f, 0f};
-        private volatile float hueTol = 0.075f;
-        private volatile float minLum = 0.5f;
+        private final float[] targetHsv = {0f, 1f, 1f};
+        private volatile float hueTol = 0.083f;
+        private volatile float satMin = 0f, satMax = 1f;
+        private volatile float valMin = 0f, valMax = 1f;
         private AtomicReference<float[]> pickRequest;
         private int surfaceWidth = 1;
         private int surfaceHeight = 1;
@@ -247,16 +276,38 @@ public class CameraSurfaceView extends GLSurfaceView implements ScaleGestureDete
             markMode = m;
         }
 
+        public void setPickPreview(boolean p) {
+            pickPreview = p;
+        }
+
         public void setTargetColor(float r, float g, float b) {
-            targetColor[0] = r; targetColor[1] = g; targetColor[2] = b;
+            int color = android.graphics.Color.rgb(
+                    Math.round(r * 255), Math.round(g * 255), Math.round(b * 255));
+            float[] hsv = new float[3];
+            android.graphics.Color.colorToHSV(color, hsv);
+            synchronized (targetHsv) {
+                targetHsv[0] = hsv[0] / 360f;
+                targetHsv[1] = hsv[1];
+                targetHsv[2] = hsv[2];
+            }
         }
 
-        public void setHueTolerance(float tol01) {
-            hueTol = tol01;
+        public void setHueToleranceDeg(float deg) {
+            hueTol = Math.max(0f, Math.min(180f, deg)) / 360f;
         }
 
-        public void setMinLuminance(float lum01) {
-            minLum = lum01;
+        public void setSatRange(float min01, float max01) {
+            satMin = clamp01(min01);
+            satMax = clamp01(max01);
+        }
+
+        public void setValRange(float min01, float max01) {
+            valMin = clamp01(min01);
+            valMax = clamp01(max01);
+        }
+
+        private static float clamp01(float v) {
+            return Math.max(0f, Math.min(1f, v));
         }
 
         public void requestPick(AtomicReference<float[]> request) {
@@ -289,9 +340,12 @@ public class CameraSurfaceView extends GLSurfaceView implements ScaleGestureDete
             mvpLocM = GLES20.glGetUniformLocation(programMark, "uMVP");
             stLocM = GLES20.glGetUniformLocation(programMark, "uSTMatrix");
             zoomLocM = GLES20.glGetUniformLocation(programMark, "uZoom");
-            colorLocM = GLES20.glGetUniformLocation(programMark, "uTargetColor");
+            hsvLocM = GLES20.glGetUniformLocation(programMark, "uTargetHSV");
             tolLocM = GLES20.glGetUniformLocation(programMark, "uHueTol");
-            minLumLocM = GLES20.glGetUniformLocation(programMark, "uMinLum");
+            satMinLocM = GLES20.glGetUniformLocation(programMark, "uSatMin");
+            satMaxLocM = GLES20.glGetUniformLocation(programMark, "uSatMax");
+            valMinLocM = GLES20.glGetUniformLocation(programMark, "uValMin");
+            valMaxLocM = GLES20.glGetUniformLocation(programMark, "uValMax");
 
             view.fireSurfaceCreated(surfaceTexture, texId);
         }
@@ -312,12 +366,10 @@ public class CameraSurfaceView extends GLSurfaceView implements ScaleGestureDete
             surfaceTexture.updateTexImage();
             surfaceTexture.getTransformMatrix(stMatrix);
 
+            draw(markMode && !pickPreview);
+
             AtomicReference<float[]> req = pickRequest;
-            boolean pickNow = (req != null && req.get() != null);
-
-            draw(markMode && !pickNow);
-
-            if (pickNow) {
+            if (req != null) {
                 float[] pos = req.getAndSet(null);
                 pickRequest = null;
                 if (pos != null) {
@@ -353,7 +405,7 @@ public class CameraSurfaceView extends GLSurfaceView implements ScaleGestureDete
                     float meanSat = (float) (satSum / n);
                     float meanVal = (float) (valSum / n);
                     int picked = android.graphics.Color.HSVToColor(
-                            new float[]{meanHue, meanSat, Math.max(meanVal, 0.6f)});
+                            new float[]{meanHue, meanSat, meanVal});
                     view.fireColorPicked(
                             android.graphics.Color.red(picked) / 255f,
                             android.graphics.Color.green(picked) / 255f,
@@ -379,9 +431,16 @@ public class CameraSurfaceView extends GLSurfaceView implements ScaleGestureDete
             GLES20.glUniformMatrix4fv(mark ? stLocM : stLocN, 1, false, stMatrix, 0);
             GLES20.glUniform1f(mark ? zoomLocM : zoomLocN, zoom);
             if (mark) {
-                GLES20.glUniform3f(colorLocM, targetColor[0], targetColor[1], targetColor[2]);
+                float[] hsv;
+                synchronized (targetHsv) {
+                    hsv = new float[]{targetHsv[0], targetHsv[1], targetHsv[2]};
+                }
+                GLES20.glUniform3f(hsvLocM, hsv[0], hsv[1], hsv[2]);
                 GLES20.glUniform1f(tolLocM, hueTol);
-                GLES20.glUniform1f(minLumLocM, minLum);
+                GLES20.glUniform1f(satMinLocM, satMin);
+                GLES20.glUniform1f(satMaxLocM, satMax);
+                GLES20.glUniform1f(valMinLocM, valMin);
+                GLES20.glUniform1f(valMaxLocM, valMax);
             }
 
             GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
@@ -395,8 +454,7 @@ public class CameraSurfaceView extends GLSurfaceView implements ScaleGestureDete
 
         private static int buildProgramSafe(String vsSrc, String fsSrc) {
             try {
-                int p = buildProgram(vsSrc, fsSrc);
-                return p;
+                return buildProgram(vsSrc, fsSrc);
             } catch (Throwable t) {
                 AppLog.e("Shader-Build fehlgeschlagen: " + t.getMessage(), t);
                 return 0;
