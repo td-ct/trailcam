@@ -219,14 +219,21 @@ public class CameraSurfaceView extends GLSurfaceView implements ScaleGestureDete
                 "  float match = step(hueDiff, uHueTol)\n" +
                 "      * step(uSatMin, hsv.y) * step(hsv.y, uSatMax)\n" +
                 "      * step(uValMin, hsv.z) * step(hsv.z, uValMax);\n" +
-                "  vec3 faded = mix(vec3(dot(col, vec3(0.299, 0.587, 0.114))), col, 0.30);\n" +
-                "  faded *= 0.65;\n" +
-                "  float sat = clamp(hsv.y * 1.6, 0.85, 1.0);\n" +
-                "  float lum = clamp(hsv.z * 1.15 + 0.25, 0.80, 1.0);\n" +
-                "  vec3 glow = hsv2rgb(vec3(hsv.x, sat, lum));\n" +
-                "  glow = mix(glow, vec3(1.0), 0.10);\n" +
-                "  vec3 result = mix(faded, glow, match);\n" +
-                "  gl_FragColor = vec4(result, 1.0);\n" +
+                "  vec3 faded = mix(vec3(dot(col, vec3(0.299, 0.587, 0.114))), col, 0.15);\n" +
+                "  faded *= 0.35;\n" +
+                "  vec3 neon = hsv2rgb(vec3(uTargetHSV.x, 1.0, 1.0));\n" +
+                "  neon = mix(neon, vec3(1.0), 0.15);\n" +
+                "  float edge = smoothstep(uHueTol, uHueTol * 0.35, hueDiff)\n" +
+                "      * smoothstep(uSatMin, uSatMin + 0.08, hsv.y)\n" +
+                "      * smoothstep(uValMin, uValMin + 0.08, hsv.z)\n" +
+                "      * (1.0 - smoothstep(uValMax - 0.08, uValMax, hsv.z));\n" +
+                "  vec3 core = mix(neon * 1.6, vec3(1.0), 0.55);\n" +
+                "  vec3 glowCol = mix(neon, vec3(1.0), 0.25) * 1.15;\n" +
+                "  vec3 halo = neon * 0.65;\n" +
+                "  vec3 result = mix(faded, halo, clamp(edge * 0.45, 0.0, 1.0));\n" +
+                "  result = mix(result, glowCol, clamp(edge - 0.35, 0.0, 1.0));\n" +
+                "  result = mix(result, core, match);\n" +
+                "  gl_FragColor = vec4(clamp(result, 0.0, 1.0), 1.0);\n" +
                 "}\n";
 
         private final CameraSurfaceView view;

@@ -1,54 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
-<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:orientation="vertical"
     android:background="@android:color/black">
 
     <de.tdct.trailcam.CameraSurfaceView
         android:id="@+id/surface_view"
         android:layout_width="match_parent"
-        android:layout_height="match_parent" />
-
-    <de.tdct.trailcam.PickOverlayView
-        android:id="@+id/pick_overlay"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:visibility="gone" />
-
-    <ImageButton
-        android:id="@+id/btn_menu"
-        android:layout_width="44dp"
-        android:layout_height="44dp"
-        android:layout_gravity="top|end"
-        android:layout_margin="8dp"
-        android:background="#66000000"
-        android:contentDescription="Men\u00fc"
-        android:src="@android:drawable/ic_menu_more"
-        android:scaleType="centerInside" />
-
-    <TextView
-        android:id="@+id/pick_hint"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="bottom|center_horizontal"
-        android:layout_marginBottom="180dp"
-        android:background="#AA000000"
-        android:paddingStart="12dp"
-        android:paddingEnd="12dp"
-        android:paddingTop="4dp"
-        android:paddingBottom="4dp"
-        android:text="Farbe im Bild antippen"
-        android:textColor="#FF4CE05A"
-        android:textSize="13sp"
-        android:visibility="gone" />
+        android:layout_height="0dp"
+        android:layout_weight="1" />
 
     <LinearLayout
         android:id="@+id/control_panel"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_gravity="bottom"
         android:orientation="vertical"
-        android:padding="12dp"
+        android:padding="8dp"
         android:background="@color/panel_bg">
 
         <LinearLayout
@@ -77,8 +45,8 @@
 
             <View
                 android:id="@+id/color_preview"
-                android:layout_width="36dp"
-                android:layout_height="36dp"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
                 android:layout_marginStart="8dp"
                 android:background="@android:color/darker_gray" />
 
@@ -191,4 +159,4 @@
                 android:gravity="end" />
         </LinearLayout>
     </LinearLayout>
-</FrameLayout>
+</LinearLayout>
