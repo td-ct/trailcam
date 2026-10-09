@@ -67,15 +67,18 @@ jobs:
           echo "TRAILCAM_KEY_PASS=${KEY_PASS:-trailcamci}" >> "$GITHUB_ENV"
 
       - name: Build release APK
-        run: gradle assembleRelease --no-daemon
+        run: gradle assembleRelease bundleRelease --no-daemon
 
       - name: Collect APK
         run: |
           mkdir -p apk
           APK=$(ls app/build/outputs/apk/release/*.apk | head -1)
+          AAB=$(ls app/build/outputs/bundle/release/*.aab | head -1)
           VERSION=$(grep -o 'versionName "[^"]*"' app/build.gradle | cut -d'"' -f2)
           cp "$APK" "apk/TrailCam-v${VERSION}-release.apk"
+          cp "$AAB" "apk/TrailCam-v${VERSION}-release.aab"
           echo "APK_PATH=apk/TrailCam-v${VERSION}-release.apk" >> "$GITHUB_ENV"
+          echo "AAB_PATH=apk/TrailCam-v${VERSION}-release.aab" >> "$GITHUB_ENV"
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
 
       - name: Verify APK signature
@@ -87,11 +90,11 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add "$APK_PATH"
+          git add "$APK_PATH" "$AAB_PATH"
           if git diff --cached --quiet; then
             echo "Keine APK-Änderungen"
             exit 0
           fi
-          git commit -m "APK v${VERSION} [skip ci]"
+          git commit -m "APK+AAB v${VERSION} [skip ci]"
           git pull --rebase origin main
           git push
