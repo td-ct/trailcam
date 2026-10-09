@@ -25,6 +25,7 @@ public class CameraSurfaceView extends GLSurfaceView implements ScaleGestureDete
         void onColorPicked(float r, float g, float b);
         default void onPickPointer(float x, float y) { }
         default void onPickPointerGone() { }
+        default void onPickPreviewColor(float r, float g, float b) { }
     }
 
     private static final float MIN_ZOOM = 1.0f;
@@ -90,6 +91,10 @@ public class CameraSurfaceView extends GLSurfaceView implements ScaleGestureDete
         if (listener != null) listener.onPickPointerGone();
     }
 
+    void firePickPreviewColor(float r, float g, float b) {
+        if (listener != null) listener.onPickPreviewColor(r, g, b);
+    }
+
     @Override
     public boolean onTouchEvent(MotionEvent event) {
         if (event.getPointerCount() >= 2) {
@@ -100,19 +105,20 @@ public class CameraSurfaceView extends GLSurfaceView implements ScaleGestureDete
         }
         scaleDetector.onTouchEvent(event);
         if (pickMode && !multiTouch) {
+            float offsetY = 0.10f * getHeight();
+            float pickY = Math.max(0f, Math.min(getHeight() - 1f, event.getY() - offsetY));
             switch (event.getActionMasked()) {
                 case MotionEvent.ACTION_DOWN:
+                    firePickPointer(event.getX(), pickY);
+                    requestPick(event.getX(), pickY, false);
+                    break;
                 case MotionEvent.ACTION_MOVE:
-                    firePickPointer(event.getX(), event.getY());
+                    firePickPointer(event.getX(), pickY);
+                    requestPick(event.getX(), pickY, false);
                     break;
                 case MotionEvent.ACTION_UP:
                     firePickPointerGone();
-                    if (pendingPick.get() == null) {
-                        float xNorm = event.getX() / Math.max(1f, getWidth());
-                        float yNorm = event.getY() / Math.max(1f, getHeight());
-                        pendingPick.set(new float[]{xNorm, yNorm});
-                        queueEvent(() -> renderer.requestPick(pendingPick));
-                    }
+                    requestPick(event.getX(), pickY, true);
                     break;
                 case MotionEvent.ACTION_CANCEL:
                     firePickPointerGone();
@@ -122,6 +128,14 @@ public class CameraSurfaceView extends GLSurfaceView implements ScaleGestureDete
             }
         }
         return true;
+    }
+
+    private void requestPick(float x, float y, boolean isFinal) {
+        pendingPick.set(new float[]{
+                x / Math.max(1f, getWidth()),
+                y / Math.max(1f, getHeight()),
+                isFinal ? 1f : 0f});
+        queueEvent(() -> renderer.requestPick(pendingPick));
     }
 
     @Override
@@ -415,10 +429,14 @@ public class CameraSurfaceView extends GLSurfaceView implements ScaleGestureDete
                     float meanVal = (float) (valSum / n);
                     int picked = android.graphics.Color.HSVToColor(
                             new float[]{meanHue, meanSat, meanVal});
-                    view.fireColorPicked(
-                            android.graphics.Color.red(picked) / 255f,
-                            android.graphics.Color.green(picked) / 255f,
-                            android.graphics.Color.blue(picked) / 255f);
+                    float pr = android.graphics.Color.red(picked) / 255f;
+                    float pg = android.graphics.Color.green(picked) / 255f;
+                    float pb2 = android.graphics.Color.blue(picked) / 255f;
+                    if (pos.length > 2 && pos[2] > 0.5f) {
+                        view.fireColorPicked(pr, pg, pb2);
+                    } else {
+                        view.firePickPreviewColor(pr, pg, pb2);
+                    }
                 }
             }
         }

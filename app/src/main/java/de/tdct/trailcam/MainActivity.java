@@ -372,6 +372,12 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
                 Math.round(r * 255), Math.round(g * 255), Math.round(b * 255)));
     }
 
+    @Override
+    public void onPickPreviewColor(float r, float g, float b) {
+        runOnUiThread(() -> colorPreview.setBackgroundColor(android.graphics.Color.rgb(
+                Math.round(r * 255), Math.round(g * 255), Math.round(b * 255))));
+    }
+
     private void updatePickHint() {
         if (pickHint != null) {
             pickHint.setVisibility(pickMode ? android.view.View.VISIBLE : android.view.View.GONE);
@@ -412,11 +418,11 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
                 pip.satMax = satRange.getMaxValue();
                 pip.valMin = valRange.getMinValue();
                 pip.valMax = valRange.getMaxValue();
-                pip.name = "Pipette " + String.format("%06X", rgb);
                 colorPresets.add(pip);
                 while (countPicked() > MAX_PICKED_PRESETS) {
                     colorPresets.remove(firstPickedIndex());
                 }
+                refreshPickedPresetNames();
                 savePickedPresets();
                 applyPreset(pip);
             }
@@ -509,12 +515,44 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
     }
 
     private void showColorPicker() {
-        String[] names = new String[colorPresets.size()];
-        for (int i = 0; i < colorPresets.size(); i++) names[i] = colorPresets.get(i).name;
+        android.widget.ArrayAdapter<ColorPreset> adapter =
+                new android.widget.ArrayAdapter<ColorPreset>(this,
+                        android.R.layout.select_dialog_item, android.R.id.text1,
+                        new java.util.ArrayList<>(colorPresets)) {
+                    @Override
+                    public android.view.View getView(int position, android.view.View convertView,
+                                                     android.view.ViewGroup parent) {
+                        android.widget.TextView v = (android.widget.TextView)
+                                super.getView(position, convertView, parent);
+                        ColorPreset p = getItem(position);
+                        android.graphics.drawable.GradientDrawable swatch =
+                                new android.graphics.drawable.GradientDrawable();
+                        swatch.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
+                        swatch.setColor(p.colorRgb);
+                        swatch.setCornerRadius(6f);
+                        swatch.setSize(48, 48);
+                        swatch.setBounds(0, 0, 48, 48);
+                        v.setCompoundDrawables(swatch, null, null, null);
+                        v.setCompoundDrawablePadding(24);
+                        return v;
+                    }
+                };
         new AlertDialog.Builder(this)
                 .setTitle(R.string.select_color)
-                .setItems(names, (d, which) -> applyPreset(colorPresets.get(which)))
+                .setAdapter(adapter, (d, which) -> applyPreset(colorPresets.get(which)))
                 .show();
+    }
+
+    private void refreshPickedPresetNames() {
+        int num = countPicked();
+        for (int i = colorPresets.size() - 1; i >= 0; i--) {
+            if (colorPresets.get(i).name.startsWith("Pipette ")
+                    || colorPresets.get(i).name.startsWith("#")) {
+                colorPresets.get(i).name = "Pipette #" + num + " "
+                        + String.format("%06X", colorPresets.get(i).colorRgb);
+                num--;
+            }
+        }
     }
 
     @Override
