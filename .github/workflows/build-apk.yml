@@ -39,6 +39,20 @@ jobs:
           KS="$RUNNER_TEMP/release.keystore"
           if [ -n "$KEYSTORE_BASE64" ]; then
             echo "$KEYSTORE_BASE64" | base64 -d > "$KS"
+            if head -c 64 "$KS" | tr -d 'A-Za-z0-9+/=\r\n' | grep -q .; then
+              echo "Keystore binary nach einmal-Dekodierung"
+            else
+              echo "Secret war doppelt Base64-kodiert, dekodiere erneut"
+              base64 -d "$KS" > "${KS}.2"
+              mv "${KS}.2" "$KS"
+            fi
+            SP="${STORE_PASS:-trailcamci}"
+            AL="${KEY_ALIAS:-trailcam}"
+            if ! keytool -list -keystore "$KS" -storepass "$SP" -alias "$AL" >/dev/null 2>&1; then
+              echo "FEHLER: Keystore konnte nicht mit Alias '$AL' gelesen werden (falsches Passwort oder falscher Alias?)"
+              keytool -list -keystore "$KS" -storepass "$SP" 2>&1 | head -5 || true
+              exit 1
+            fi
             echo "Nutze Keystore aus CI_KEYSTORE_BASE64"
           else
             keytool -genkeypair -keystore "$KS" \
