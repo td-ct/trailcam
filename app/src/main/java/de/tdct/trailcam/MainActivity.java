@@ -105,7 +105,7 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
     private static final float DEF_VAL_MAX = 1f;
 
     private static final class ColorPreset {
-        final String name;
+        String name;
         final int colorRgb;
         float hueTol;
         float satMin, satMax;
