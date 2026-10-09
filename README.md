@@ -54,3 +54,9 @@ Release-APKs werden mit dem privaten Key (`trailcam-release-keystore.p12`,
 Alias `trailcam`) signiert. Zertifikat-SHA-256:
 
     64:69:68:8D:30:57:E8:00:2C:D0:6E:DE:F2:6A:B4:0D:AB:73:1D:01:2D:CB:7A:8D:D9:5F:E0:52:67:97:89:07
+
+## Datenschutz
+
+Die App speichert keinerlei personenbezogene Daten. Die Kamera wird nur live
+ausgewertet, eine Speicherung von Bildern erfolgt nicht. Details:
+[Datenschutz.md](Datenschutz.md)
