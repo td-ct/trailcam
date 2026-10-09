@@ -4,14 +4,14 @@ plugins {
 
 android {
     namespace 'de.tdct.trailcam'
-    compileSdk 34
+    compileSdk 36
 
     defaultConfig {
         applicationId "de.pixcaelium.trailcam"
         minSdk 24
-        targetSdk 34
-        versionCode 26
-        versionName "1.20"
+        targetSdk 36
+        versionCode 27
+        versionName "1.21"
     }
 
     buildTypes {
