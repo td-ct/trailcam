@@ -220,7 +220,9 @@ public class CameraSurfaceView extends GLSurfaceView implements ScaleGestureDete
                 "      * step(uSatMin, hsv.y) * step(hsv.y, uSatMax)\n" +
                 "      * step(uValMin, hsv.z) * step(hsv.z, uValMax);\n" +
                 "  vec3 faded = mix(vec3(dot(col, vec3(0.299, 0.587, 0.114))), col, 0.15);\n" +
-                "  faded *= 0.35;\n" +
+                "  vec3 sepia = vec3(1.20, 1.05, 0.80);\n" +
+                "  faded = faded * sepia;\n" +
+                "  faded = clamp(faded * 0.85 + 0.30, 0.0, 1.0);\n" +
                 "  vec3 neon = hsv2rgb(vec3(uTargetHSV.x, 1.0, 1.0));\n" +
                 "  neon = mix(neon, vec3(1.0), 0.15);\n" +
                 "  float edge = smoothstep(uHueTol, uHueTol * 0.35, hueDiff)\n" +

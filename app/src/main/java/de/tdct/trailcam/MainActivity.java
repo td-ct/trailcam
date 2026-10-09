@@ -98,19 +98,37 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
 
     private float pickedR = 1f, pickedG = 0f, pickedB = 0f;
 
-    private static final float[][] PRESET_COLORS = {
-            {1f, 0f, 0f},
-            {1f, 0.5f, 0f},
-            {1f, 1f, 0f},
-            {0f, 1f, 0f},
-            {0f, 1f, 1f},
-            {0f, 0f, 1f},
-            {1f, 0f, 1f},
-            {0.72f, 0.52f, 0.36f},
-            {0.80f, 0.66f, 0.50f},
-            {0.62f, 0.45f, 0.32f},
-            {0.87f, 0.72f, 0.53f},
-    };
+    private static final float DEF_HUE_TOL = 15f;
+    private static final float DEF_SAT_MIN = 0.50f;
+    private static final float DEF_SAT_MAX = 1f;
+    private static final float DEF_VAL_MIN = 0.40f;
+    private static final float DEF_VAL_MAX = 1f;
+
+    private static final class ColorPreset {
+        final String name;
+        final int colorRgb;
+        float hueTol;
+        float satMin, satMax;
+        float valMin, valMax;
+
+        ColorPreset(String name, int colorRgb) {
+            this(name, colorRgb, DEF_HUE_TOL, DEF_SAT_MIN, DEF_SAT_MAX, DEF_VAL_MIN, DEF_VAL_MAX);
+        }
+
+        ColorPreset(String name, int colorRgb, float hueTol,
+                    float satMin, float satMax, float valMin, float valMax) {
+            this.name = name;
+            this.colorRgb = colorRgb;
+            this.hueTol = hueTol;
+            this.satMin = satMin;
+            this.satMax = satMax;
+            this.valMin = valMin;
+            this.valMax = valMax;
+        }
+    }
+
+    private final java.util.List<ColorPreset> colorPresets = new java.util.ArrayList<>();
+    private static final int MAX_PICKED_PRESETS = 3;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -165,6 +183,7 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 slideValue.setText(progress + "\u00b0");
                 surfaceView.getRenderer().setHueToleranceDeg(progress);
+                updateActivePresetFromSliders();
             }
 
             @Override public void onStartTrackingTouch(SeekBar seekBar) { }
@@ -174,22 +193,18 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
         satRange.setOnRangeChangeListener((min, max) -> {
             slideValue.setText(fmtPct(min) + "-" + fmtPct(max) + "%");
             surfaceView.getRenderer().setSatRange(min, max);
+            updateActivePresetFromSliders();
         });
 
         valRange.setOnRangeChangeListener((min, max) -> {
             slideValue.setText(fmtPct(min) + "-" + fmtPct(max) + "%");
             surfaceView.getRenderer().setValRange(min, max);
+            updateActivePresetFromSliders();
         });
 
+        initPresets();
+        applyPreset(new ColorPreset("", android.graphics.Color.rgb(255, 0, 0)));
         selectTab(TAB_HUE);
-        slideValue.setText(hueSlider.getProgress() + "\u00b0");
-
-        surfaceView.getRenderer().setHueToleranceDeg(hueSlider.getProgress());
-        satRange.setValues(0f, 1f);
-        valRange.setValues(0f, 1f);
-        surfaceView.getRenderer().setSatRange(0f, 1f);
-        surfaceView.getRenderer().setValRange(0f, 1f);
-
         updateControls();
 
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
@@ -226,6 +241,130 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
         return String.valueOf(Math.round(v * 100f));
     }
 
+    private void initPresets() {
+        colorPresets.clear();
+        colorPresets.add(new ColorPreset("Rot", android.graphics.Color.rgb(255, 0, 0)));
+        colorPresets.add(new ColorPreset("Orange", android.graphics.Color.rgb(255, 128, 0)));
+        colorPresets.add(new ColorPreset("Gelb", android.graphics.Color.rgb(255, 255, 0)));
+        colorPresets.add(new ColorPreset("Gr\u00fcn", android.graphics.Color.rgb(0, 255, 0)));
+        colorPresets.add(new ColorPreset("Cyan", android.graphics.Color.rgb(0, 255, 255)));
+        colorPresets.add(new ColorPreset("Blau", android.graphics.Color.rgb(0, 0, 255)));
+        colorPresets.add(new ColorPreset("Magenta", android.graphics.Color.rgb(255, 0, 255)));
+        colorPresets.add(new ColorPreset("Hellbraun", android.graphics.Color.rgb(184, 133, 92)));
+        colorPresets.add(new ColorPreset("Beige", android.graphics.Color.rgb(204, 168, 128)));
+        colorPresets.add(new ColorPreset("Dunkelbraun", android.graphics.Color.rgb(158, 115, 82)));
+        colorPresets.add(new ColorPreset("Sepia", android.graphics.Color.rgb(222, 184, 135)));
+        loadPickedPresets();
+        loadPresetSettings();
+    }
+
+    private static final String PREFS_NAME = "trailcam_presets";
+
+    private android.content.SharedPreferences prefs() {
+        return getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
+    }
+
+    private void savePresetSettings() {
+        android.content.SharedPreferences.Editor ed = prefs().edit();
+        StringBuilder sb = new StringBuilder();
+        int i = 0;
+        for (ColorPreset p : colorPresets) {
+            if (sb.length() > 0) sb.append(';');
+            sb.append(p.name).append('|')
+                    .append(p.colorRgb).append('|')
+                    .append(p.hueTol).append('|')
+                    .append(p.satMin).append('|').append(p.satMax).append('|')
+                    .append(p.valMin).append('|').append(p.valMax);
+            i++;
+        }
+        ed.putString("presets", sb.toString());
+        ed.apply();
+    }
+
+    private void loadPresetSettings() {
+        String saved = prefs().getString("presets", "");
+        if (saved == null || saved.isEmpty()) return;
+        String[] entries = saved.split(";");
+        for (String e : entries) {
+            String[] f = e.split("\\|");
+            if (f.length != 7) continue;
+            try {
+                ColorPreset p = new ColorPreset(f[0], Integer.parseInt(f[1]),
+                        Float.parseFloat(f[2]),
+                        Float.parseFloat(f[3]), Float.parseFloat(f[4]),
+                        Float.parseFloat(f[5]), Float.parseFloat(f[6]));
+                for (int i = 0; i < colorPresets.size(); i++) {
+                    if (colorPresets.get(i).name.equals(p.name)
+                            && colorPresets.get(i).colorRgb == p.colorRgb) {
+                        colorPresets.set(i, p);
+                        break;
+                    }
+                }
+            } catch (NumberFormatException ignored) {
+            }
+        }
+    }
+
+    private void loadPickedPresets() {
+        String saved = prefs().getString("picked", "");
+        if (saved == null || saved.isEmpty()) return;
+        for (String e : saved.split(";")) {
+            String[] f = e.split("\\|");
+            if (f.length != 7) continue;
+            try {
+                colorPresets.add(new ColorPreset(f[0], Integer.parseInt(f[1]),
+                        Float.parseFloat(f[2]),
+                        Float.parseFloat(f[3]), Float.parseFloat(f[4]),
+                        Float.parseFloat(f[5]), Float.parseFloat(f[6])));
+            } catch (NumberFormatException ignored) {
+            }
+        }
+    }
+
+    private void savePickedPresets() {
+        java.util.List<ColorPreset> picked = new java.util.ArrayList<>();
+        for (ColorPreset p : colorPresets) {
+            if (p.name.startsWith("Pipette ")) picked.add(p);
+        }
+        StringBuilder sb = new StringBuilder();
+        for (ColorPreset p : picked) {
+            if (sb.length() > 0) sb.append(';');
+            sb.append(p.name).append('|').append(p.colorRgb).append('|')
+                    .append(p.hueTol).append('|')
+                    .append(p.satMin).append('|').append(p.satMax).append('|')
+                    .append(p.valMin).append('|').append(p.valMax);
+        }
+        prefs().edit().putString("picked", sb.toString()).apply();
+    }
+
+    private void applyPreset(ColorPreset p) {
+        applyColor(android.graphics.Color.red(p.colorRgb) / 255f,
+                android.graphics.Color.green(p.colorRgb) / 255f,
+                android.graphics.Color.blue(p.colorRgb) / 255f);
+        hueSlider.setProgress(Math.round(p.hueTol));
+        satRange.setValues(p.satMin, p.satMax);
+        valRange.setValues(p.valMin, p.valMax);
+        surfaceView.getRenderer().setHueToleranceDeg(p.hueTol);
+        surfaceView.getRenderer().setSatRange(p.satMin, p.satMax);
+        surfaceView.getRenderer().setValRange(p.valMin, p.valMax);
+        updateSlideValueLabel();
+    }
+
+    private void storeCurrentSettingsIntoPreset(ColorPreset p) {
+        p.hueTol = hueSlider.getProgress();
+        p.satMin = satRange.getMinValue();
+        p.satMax = satRange.getMaxValue();
+        p.valMin = valRange.getMinValue();
+        p.valMax = valRange.getMaxValue();
+    }
+
+    private ColorPreset findMatchingPreset(int rgb) {
+        for (ColorPreset p : colorPresets) {
+            if (p.colorRgb == rgb) return p;
+        }
+        return null;
+    }
+
     private void applyColor(float r, float g, float b) {
         pickedR = r; pickedG = g; pickedB = b;
         surfaceView.getRenderer().setTargetColor(r, g, b);
@@ -257,8 +396,70 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
             pickOverlay.hide();
             pickOverlay.setVisibility(android.view.View.GONE);
             applyColor(r, g, b);
+            int rgb = android.graphics.Color.rgb(
+                    Math.round(r * 255), Math.round(g * 255), Math.round(b * 255));
+            ColorPreset existing = findMatchingPreset(rgb);
+            if (existing != null && !existing.name.startsWith("Pipette ")) {
+                applyPreset(existing);
+            } else {
+                ColorPreset pip = new ColorPreset("Pipette", rgb);
+                if (existing != null) {
+                    pip = existing;
+                    colorPresets.remove(existing);
+                }
+                pip.hueTol = hueSlider.getProgress();
+                pip.satMin = satRange.getMinValue();
+                pip.satMax = satRange.getMaxValue();
+                pip.valMin = valRange.getMinValue();
+                pip.valMax = valRange.getMaxValue();
+                pip.name = "Pipette " + String.format("%06X", rgb);
+                colorPresets.add(pip);
+                while (countPicked() > MAX_PICKED_PRESETS) {
+                    colorPresets.remove(firstPickedIndex());
+                }
+                savePickedPresets();
+                applyPreset(pip);
+            }
             updateControls();
         });
+    }
+
+    private void updateActivePresetFromSliders() {
+        int rgb = android.graphics.Color.rgb(
+                Math.round(pickedR * 255), Math.round(pickedG * 255), Math.round(pickedB * 255));
+        ColorPreset active = findMatchingPreset(rgb);
+        if (active != null) {
+            storeCurrentSettingsIntoPreset(active);
+            if (active.name.startsWith("Pipette ")) {
+                savePickedPresets();
+            } else {
+                savePresetSettings();
+            }
+        }
+    }
+
+    private int countPicked() {
+        int n = 0;
+        for (ColorPreset p : colorPresets) {
+            if (p.name.startsWith("Pipette ")) n++;
+        }
+        return n;
+    }
+
+    private int firstPickedIndex() {
+        for (int i = 0; i < colorPresets.size(); i++) {
+            if (colorPresets.get(i).name.startsWith("Pipette ")) return i;
+        }
+        return colorPresets.size() - 1;
+    }
+
+    private void updateSlideValueLabel() {
+        if (activeTab == TAB_HUE) {
+            slideValue.setText(hueSlider.getProgress() + "\u00b0");
+        } else {
+            RangeSeekBar rs = (activeTab == TAB_SAT) ? satRange : valRange;
+            slideValue.setText(fmtPct(rs.getMinValue()) + "-" + fmtPct(rs.getMaxValue()) + "%");
+        }
     }
 
     @Override
@@ -308,14 +509,11 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
     }
 
     private void showColorPicker() {
-        String[] names = {"Rot", "Orange", "Gelb", "Gr\u00fcn", "Cyan", "Blau", "Magenta",
-                "Hellbraun", "Beige", "Dunkelbraun", "Sepia"};
+        String[] names = new String[colorPresets.size()];
+        for (int i = 0; i < colorPresets.size(); i++) names[i] = colorPresets.get(i).name;
         new AlertDialog.Builder(this)
                 .setTitle(R.string.select_color)
-                .setItems(names, (d, which) -> {
-                    float[] c = PRESET_COLORS[which];
-                    applyColor(c[0], c[1], c[2]);
-                })
+                .setItems(names, (d, which) -> applyPreset(colorPresets.get(which)))
                 .show();
     }
 
