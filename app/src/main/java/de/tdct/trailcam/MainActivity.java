@@ -45,11 +45,16 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
     private Button btnPickColor;
     private android.view.View colorPreview;
     private SeekBar hueSlider;
-    private TextView hueValue;
+    private Button btnTabHue;
+    private Button btnTabSat;
+    private Button btnTabVal;
+    private TextView slideValue;
+    private static final int TAB_HUE = 0;
+    private static final int TAB_SAT = 1;
+    private static final int TAB_VAL = 2;
+    private int activeTab = TAB_HUE;
     private RangeSeekBar satRange;
-    private TextView satValue;
     private RangeSeekBar valRange;
-    private TextView valValue;
     private TextView pickHint;
     private PickOverlayView pickOverlay;
     private Button btnPickEyedropper;
@@ -122,11 +127,12 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
         btnMenu.setOnClickListener(v -> showMenu());
 
         hueSlider = findViewById(R.id.hue_slider);
-        hueValue = findViewById(R.id.hue_value);
+        btnTabHue = findViewById(R.id.btn_tab_hue);
+        btnTabSat = findViewById(R.id.btn_tab_sat);
+        btnTabVal = findViewById(R.id.btn_tab_val);
+        slideValue = findViewById(R.id.slide_value);
         satRange = findViewById(R.id.sat_range);
-        satValue = findViewById(R.id.sat_value);
         valRange = findViewById(R.id.val_range);
-        valValue = findViewById(R.id.val_value);
         pickHint = findViewById(R.id.pick_hint);
         pickOverlay = findViewById(R.id.pick_overlay);
 
@@ -150,10 +156,14 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
             updatePickHint();
         });
 
+        btnTabHue.setOnClickListener(v -> selectTab(TAB_HUE));
+        btnTabSat.setOnClickListener(v -> selectTab(TAB_SAT));
+        btnTabVal.setOnClickListener(v -> selectTab(TAB_VAL));
+
         hueSlider.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                hueValue.setText(progress + "\u00b0");
+                slideValue.setText(progress + "\u00b0");
                 surfaceView.getRenderer().setHueToleranceDeg(progress);
             }
 
@@ -162,14 +172,17 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
         });
 
         satRange.setOnRangeChangeListener((min, max) -> {
-            satValue.setText(fmtPct(min) + "-" + fmtPct(max) + "%");
+            slideValue.setText(fmtPct(min) + "-" + fmtPct(max) + "%");
             surfaceView.getRenderer().setSatRange(min, max);
         });
 
         valRange.setOnRangeChangeListener((min, max) -> {
-            valValue.setText(fmtPct(min) + "-" + fmtPct(max) + "%");
+            slideValue.setText(fmtPct(min) + "-" + fmtPct(max) + "%");
             surfaceView.getRenderer().setValRange(min, max);
         });
+
+        selectTab(TAB_HUE);
+        slideValue.setText(hueSlider.getProgress() + "\u00b0");
 
         surfaceView.getRenderer().setHueToleranceDeg(hueSlider.getProgress());
         satRange.setValues(0f, 1f);
@@ -183,6 +196,30 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
                 != PackageManager.PERMISSION_GRANTED) {
             ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.CAMERA}, REQ_PERMISSION);
         }
+    }
+
+    private void selectTab(int tab) {
+        activeTab = tab;
+        hueSlider.setVisibility(tab == TAB_HUE ? android.view.View.VISIBLE : android.view.View.GONE);
+        satRange.setVisibility(tab == TAB_SAT ? android.view.View.VISIBLE : android.view.View.GONE);
+        valRange.setVisibility(tab == TAB_VAL ? android.view.View.VISIBLE : android.view.View.GONE);
+        if (tab == TAB_HUE) {
+            slideValue.setText(hueSlider.getProgress() + "\u00b0");
+        } else {
+            RangeSeekBar rs = (tab == TAB_SAT) ? satRange : valRange;
+            slideValue.setText(fmtPct(rs.getMinValue()) + "-" + fmtPct(rs.getMaxValue()) + "%");
+        }
+        updateTabStates();
+    }
+
+    private void updateTabStates() {
+        boolean hueActive = activeTab == TAB_HUE;
+        btnTabHue.setEnabled(markMode && !hueActive);
+        btnTabSat.setEnabled(markMode && activeTab != TAB_SAT);
+        btnTabVal.setEnabled(markMode && activeTab != TAB_VAL);
+        hueSlider.setEnabled(markMode && hueActive);
+        satRange.setRangeEnabled(markMode && activeTab == TAB_SAT);
+        valRange.setRangeEnabled(markMode && activeTab == TAB_VAL);
     }
 
     private static String fmtPct(float v) {
@@ -208,9 +245,7 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
         btnPickColor.setEnabled(markMode && !pickMode);
         btnPickEyedropper.setEnabled(markMode);
         btnPickEyedropper.setText(pickMode ? "Pipette aktiv" : "Pipette");
-        hueSlider.setEnabled(markMode);
-        satRange.setRangeEnabled(markMode);
-        valRange.setRangeEnabled(markMode);
+        updateTabStates();
         surfaceView.getRenderer().setPickPreview(pickMode && markMode);
     }
 

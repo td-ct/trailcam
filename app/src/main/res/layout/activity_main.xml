@@ -109,96 +109,76 @@
             android:gravity="center_vertical"
             android:layout_marginTop="6dp">
 
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="H \u00b1"
-                android:textColor="@color/white"
-                android:textSize="14sp" />
+            <Button
+                android:id="@+id/btn_tab_hue"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="40dp"
+                android:textSize="12sp"
+                android:textAllCaps="false"
+                android:text="H (Farbe)" />
+
+            <Button
+                android:id="@+id/btn_tab_sat"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="40dp"
+                android:textSize="12sp"
+                android:layout_marginStart="6dp"
+                android:textAllCaps="false"
+                android:text="S (S\u00e4ttigung)" />
+
+            <Button
+                android:id="@+id/btn_tab_val"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="40dp"
+                android:textSize="12sp"
+                android:layout_marginStart="6dp"
+                android:textAllCaps="false"
+                android:text="V (Helligkeit)" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="44dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginTop="4dp">
 
             <SeekBar
                 android:id="@+id/hue_slider"
                 android:layout_width="0dp"
                 android:layout_weight="1"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="6dp"
                 android:max="180"
                 android:progress="30"
                 android:enabled="false" />
-
-            <TextView
-                android:id="@+id/hue_value"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="30\u00b0"
-                android:textColor="@color/white"
-                android:textSize="12sp"
-                android:minWidth="36dp"
-                android:gravity="end" />
-        </LinearLayout>
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="40dp"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:layout_marginTop="4dp">
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="S"
-                android:textColor="@color/white"
-                android:textSize="14sp" />
 
             <de.tdct.trailcam.RangeSeekBar
                 android:id="@+id/sat_range"
                 android:layout_width="0dp"
                 android:layout_weight="1"
                 android:layout_height="36dp"
-                android:layout_marginStart="6dp" />
-
-            <TextView
-                android:id="@+id/sat_value"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="0-100%"
-                android:textColor="@color/white"
-                android:textSize="12sp"
-                android:minWidth="56dp"
-                android:gravity="end" />
-        </LinearLayout>
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="40dp"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:layout_marginTop="4dp">
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="V"
-                android:textColor="@color/white"
-                android:textSize="14sp" />
+                android:visibility="gone" />
 
             <de.tdct.trailcam.RangeSeekBar
                 android:id="@+id/val_range"
                 android:layout_width="0dp"
                 android:layout_weight="1"
                 android:layout_height="36dp"
-                android:layout_marginStart="6dp" />
+                android:visibility="gone" />
 
             <TextView
-                android:id="@+id/val_value"
+                android:id="@+id/slide_value"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="0-100%"
+                android:text="30\u00b0"
                 android:textColor="@color/white"
                 android:textSize="12sp"
-                android:minWidth="56dp"
-                android:gravity="end" />
+                android:minWidth="64dp"
+                android:gravity="end"
+                android:layout_marginStart="8dp" />
         </LinearLayout>
     </LinearLayout>
 </LinearLayout>
