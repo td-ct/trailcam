@@ -47,3 +47,10 @@ Base64 in den GitHub-Actions-Secrets `CI_KEYSTORE_BASE64`, `CI_STORE_PASS`,
 `CI_KEY_ALIAS`, `CI_KEY_PASS` konfiguriert (ein Backup des Keystores liegt sicher
 außerhalb des Repos). Fehlen die Secrets, erzeugt die CI einen temporären
 Key -- dann sind keine Updates ueber bestehende Installationen moeglich.
+
+## Signierung
+
+Release-APKs werden mit dem privaten Key (`trailcam-release-keystore.p12`,
+Alias `trailcam`) signiert. Zertifikat-SHA-256:
+
+    64:69:68:8D:30:57:E8:00:2C:D0:6E:DE:F2:6A:B4:0D:AB:73:1D:01:2D:CB:7A:8D:D9:5F:E0:52:67:97:89:07
