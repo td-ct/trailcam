@@ -8,7 +8,8 @@
     <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="1">
+        android:layout_weight="1"
+        android:minHeight="200dp">
 
         <de.tdct.trailcam.CameraSurfaceView
             android:id="@+id/surface_view"
@@ -54,7 +55,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="8dp"
+        android:padding="6dp"
         android:background="@color/panel_bg">
 
         <LinearLayout
@@ -67,7 +68,8 @@
                 android:id="@+id/btn_mode"
                 android:layout_width="0dp"
                 android:layout_weight="1"
-                android:layout_height="wrap_content"
+                android:layout_height="40dp"
+                android:textSize="12sp"
                 android:text="@string/btn_mode_mark"
                 android:textAllCaps="false" />
 
@@ -75,7 +77,8 @@
                 android:id="@+id/btn_pick_color"
                 android:layout_width="0dp"
                 android:layout_weight="1"
-                android:layout_height="wrap_content"
+                android:layout_height="40dp"
+                android:textSize="12sp"
                 android:layout_marginStart="8dp"
                 android:text="@string/select_color"
                 android:textAllCaps="false"
@@ -91,7 +94,8 @@
             <Button
                 android:id="@+id/btn_pick_eyedropper"
                 android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
+                android:layout_height="40dp"
+                android:textSize="12sp"
                 android:layout_marginStart="8dp"
                 android:text="Pipette"
                 android:textAllCaps="false"
@@ -103,7 +107,7 @@
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:gravity="center_vertical"
-            android:layout_marginTop="4dp">
+            android:layout_marginTop="6dp" android:layout_height="40dp">
 
             <TextView
                 android:layout_width="wrap_content"
@@ -138,7 +142,7 @@
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:gravity="center_vertical"
-            android:layout_marginTop="2dp">
+            android:layout_marginTop="4dp" android:layout_height="40dp">
 
             <TextView
                 android:layout_width="wrap_content"
@@ -151,7 +155,7 @@
                 android:id="@+id/sat_range"
                 android:layout_width="0dp"
                 android:layout_weight="1"
-                android:layout_height="wrap_content"
+                android:layout_height="36dp"
                 android:layout_marginStart="6dp" />
 
             <TextView
@@ -170,7 +174,7 @@
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:gravity="center_vertical"
-            android:layout_marginTop="2dp">
+            android:layout_marginTop="4dp" android:layout_height="40dp">
 
             <TextView
                 android:layout_width="wrap_content"
@@ -183,7 +187,7 @@
                 android:id="@+id/val_range"
                 android:layout_width="0dp"
                 android:layout_weight="1"
-                android:layout_height="wrap_content"
+                android:layout_height="36dp"
                 android:layout_marginStart="6dp" />
 
             <TextView
