@@ -111,6 +111,11 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
         float satMin, satMax;
         float valMin, valMax;
 
+        @Override
+        public String toString() {
+            return name;
+        }
+
         ColorPreset(String name, int colorRgb) {
             this(name, colorRgb, DEF_HUE_TOL, DEF_SAT_MIN, DEF_SAT_MAX, DEF_VAL_MIN, DEF_VAL_MAX);
         }
@@ -249,13 +254,10 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
         colorPresets.add(new ColorPreset("Gr\u00fcn", android.graphics.Color.rgb(0, 255, 0)));
         colorPresets.add(new ColorPreset("Cyan", android.graphics.Color.rgb(0, 255, 255)));
         colorPresets.add(new ColorPreset("Blau", android.graphics.Color.rgb(0, 0, 255)));
-        colorPresets.add(new ColorPreset("Magenta", android.graphics.Color.rgb(255, 0, 255)));
-        colorPresets.add(new ColorPreset("Hellbraun", android.graphics.Color.rgb(184, 133, 92)));
-        colorPresets.add(new ColorPreset("Beige", android.graphics.Color.rgb(204, 168, 128)));
-        colorPresets.add(new ColorPreset("Dunkelbraun", android.graphics.Color.rgb(158, 115, 82)));
-        colorPresets.add(new ColorPreset("Sepia", android.graphics.Color.rgb(222, 184, 135)));
+        colorPresets.add(new ColorPreset("Pink", android.graphics.Color.rgb(255, 105, 180)));
         loadPickedPresets();
         loadPresetSettings();
+        refreshPickedPresetNames();
     }
 
     private static final String PREFS_NAME = "trailcam_presets";
