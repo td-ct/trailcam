@@ -73,9 +73,7 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
     private final SensorEventListener lightListener = new SensorEventListener() {
         @Override
         public void onSensorChanged(SensorEvent event) {
-            float lux = event.values[0];
-            float b = Math.max(0f, Math.min(1f, (lux - 10f) / 90f));
-            surfaceView.getRenderer().setBrightMode(b);
+            surfaceView.getRenderer().setBrightMode(0f);
         }
         @Override
         public void onAccuracyChanged(Sensor sensor, int accuracy) { }
@@ -299,6 +297,11 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
         ed.commit();
     }
 
+    private static String stripHexSuffix(String name) {
+        if (name == null) return "";
+        return name.replaceAll("\\s*#?[0-9A-Fa-f]{6}$", "").replaceAll("\\s+$", "");
+    }
+
     private void loadPresetSettings() {
         String saved = prefs().getString("presets", "");
         if (saved == null || saved.isEmpty()) return;
@@ -311,8 +314,10 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
                         Float.parseFloat(f[2]),
                         Float.parseFloat(f[3]), Float.parseFloat(f[4]),
                         Float.parseFloat(f[5]), Float.parseFloat(f[6]));
+                String stripped = stripHexSuffix(p.name);
                 for (int i = 0; i < colorPresets.size(); i++) {
-                    if (colorPresets.get(i).name.equals(p.name)
+                    String existingName = stripHexSuffix(colorPresets.get(i).name);
+                    if (existingName.equals(stripped)
                             && colorPresets.get(i).colorRgb == p.colorRgb) {
                         colorPresets.set(i, p);
                         break;
@@ -335,7 +340,7 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
             String[] f = e.split("\\|");
             if (f.length != 7) continue;
             try {
-                loaded.add(new ColorPreset(f[0], Integer.parseInt(f[1]),
+                loaded.add(new ColorPreset(stripHexSuffix(f[0]), Integer.parseInt(f[1]),
                         Float.parseFloat(f[2]),
                         Float.parseFloat(f[3]), Float.parseFloat(f[4]),
                         Float.parseFloat(f[5]), Float.parseFloat(f[6])));
@@ -575,8 +580,44 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
     private void refreshPickedPresetNames() {
         java.util.List<ColorPreset> slots = pipetteSlots();
         for (int i = 0; i < slots.size(); i++) {
-            slots.get(i).name = "Pipette #" + (i + 1) + " "
-                    + String.format("%06X", slots.get(i).colorRgb);
+            slots.get(i).name = "Pipette #" + (i + 1);
+        }
+    }
+
+    private float currentCameraZoom = 1f;
+    private Range<Float> zoomRange = null;
+
+    private boolean setCameraZoom(float z) {
+        CameraCaptureSession s = session;
+        if (s == null) return false;
+        try {
+            CaptureRequest.Builder builder =
+                    camera.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
+            builder.addTarget(previewSurface);
+            if (zoomRange != null) {
+                float min = zoomRange.getLower();
+                float max = zoomRange.getUpper();
+                z = Math.max(min, Math.min(max, z));
+            }
+            if (android.os.Build.VERSION.SDK_INT >= 30) {
+                builder.set(CaptureRequest.CONTROL_ZOOM_RATIO, z);
+            } else {
+                builder.set(CaptureRequest.SCALER_CROP_REGION, null);
+                return false;
+            }
+            s.setRepeatingRequest(builder.build(), null, bgHandler);
+            currentCameraZoom = z;
+            return true;
+        } catch (Exception e) {
+            AppLog.w("setCameraZoom failed: " + e);
+            return false;
+        }
+    }
+
+    @Override
+    public void onZoomChanged(float z) {
+        if (!setCameraZoom(z)) {
+            surfaceView.getRenderer().setZoom(z);
         }
     }
 
@@ -679,6 +720,10 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
             }
 
             CameraCharacteristics ch = mgr.getCameraCharacteristics(cameraId);
+            if (android.os.Build.VERSION.SDK_INT >= 30) {
+                zoomRange = ch.get(CameraCharacteristics.CONTROL_ZOOM_RATIO_RANGE);
+                AppLog.d("zoomRange=" + zoomRange);
+            }
             StreamConfigurationMap map = ch.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
             Size best = null;
             Size largest = null;
@@ -705,6 +750,9 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
                 return;
             }
             AppLog.d("preview size=" + best);
+            float viewAspect = (float) surfaceView.getWidth() / Math.max(1, surfaceView.getHeight());
+            float texAspect = (float) best.getHeight() / Math.max(1, best.getWidth());
+            surfaceView.getRenderer().setAspect(viewAspect / texAspect);
             try {
                 texture.setDefaultBufferSize(best.getWidth(), best.getHeight());
             } catch (Exception e) {
@@ -750,6 +798,9 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
                                             builder.addTarget(surface);
                                             sess.setRepeatingRequest(builder.build(), null, h);
                                             AppLog.i("Preview laeuft");
+                                            if (currentCameraZoom > 1f && setCameraZoom(currentCameraZoom)) {
+                                                surfaceView.getRenderer().setZoom(1.0f);
+                                            }
                                         } catch (Exception e) {
                                             AppLog.e("setRepeatingRequest failed", e);
                                             closeCameraQuietly();

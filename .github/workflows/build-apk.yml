@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - vibe/hsv-range-sliders-3133ef
+      - vibe/pipette-names-dark-zoom-fix-cf595e
       - main
     paths-ignore:
       - 'apk/**'
@@ -96,5 +97,5 @@ jobs:
             exit 0
           fi
           git commit -m "APK+AAB v${VERSION} [skip ci]"
-          git pull --rebase origin main
-          git push
+          git pull --rebase origin "$GITHUB_REF_NAME"
+          git push origin "$GITHUB_REF_NAME"
