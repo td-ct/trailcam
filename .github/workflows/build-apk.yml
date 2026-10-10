@@ -5,6 +5,7 @@ on:
     branches:
       - vibe/hsv-range-sliders-3133ef
       - vibe/pipette-names-dark-zoom-fix-cf595e
+      - vibe/zoom-label-invert-mode-cf595e
       - main
     paths-ignore:
       - 'apk/**'

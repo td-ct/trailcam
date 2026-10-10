@@ -47,6 +47,7 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
     private CameraSurfaceView surfaceView;
     private Button btnMode;
     private Button btnPickColor;
+    private TextView zoomLabel;
     private android.view.View colorPreview;
     private SeekBar hueSlider;
     private Button btnTabHue;
@@ -80,6 +81,7 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
     };
     private SurfaceTexture glSurfaceTexture;
     private boolean markMode = false;
+    private boolean invertMode = false;
     private boolean pickMode = false;
     private final float[] hsvTmp = new float[3];
 
@@ -176,13 +178,23 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
         surfaceView.setListener(this);
 
         btnMode.setOnClickListener(v -> {
-            markMode = !markMode;
+            if (!markMode) {
+                markMode = true;
+                invertMode = false;
+            } else if (!invertMode) {
+                invertMode = true;
+            } else {
+                markMode = false;
+                invertMode = false;
+            }
             surfaceView.getRenderer().setMarkMode(markMode);
+            surfaceView.getRenderer().setInvertMode(invertMode);
             updateControls();
         });
 
         btnPickColor.setOnClickListener(v -> showColorPicker());
         btnPickEyedropper = findViewById(R.id.btn_pick_eyedropper);
+        zoomLabel = findViewById(R.id.zoom_label);
         btnPickEyedropper.setOnClickListener(v -> {
             pickMode = !pickMode;
             surfaceView.setPickMode(pickMode);
@@ -221,6 +233,7 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
             updateActivePresetFromSliders();
         });
 
+        updateZoomLabel(1f, null);
         initPresets();
         applyPreset(new ColorPreset("", android.graphics.Color.rgb(255, 0, 0)));
         selectTab(TAB_HUE);
@@ -429,9 +442,60 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
         }
     }
 
+    private String activeCameraLetter(float zoomRatio) {
+        if (android.os.Build.VERSION.SDK_INT < 30) return null;
+        try {
+            CameraManager mgr = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
+            if (mgr == null) return null;
+            float mainFocal = -1f;
+            float bestMinRatio = -1f;
+            float bestFocal = -1f;
+            for (String id : mgr.getCameraIdList()) {
+                CameraCharacteristics ch = mgr.getCameraCharacteristics(id);
+                Integer facing = ch.get(CameraCharacteristics.LENS_FACING);
+                if (facing == null || facing != CameraCharacteristics.LENS_FACING_BACK) continue;
+                Range<Float> zr = ch.get(CameraCharacteristics.CONTROL_ZOOM_RATIO_RANGE);
+                float minRatio = 1f;
+                if (zr != null && zr.getLower() != null) {
+                    minRatio = zr.getLower();
+                }
+                float[] focals = ch.get(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS);
+                float focal = (focals != null && focals.length > 0) ? focals[0] : -1f;
+                if (Math.abs(minRatio - 1f) < 0.001f && focal > 0f) {
+                    mainFocal = focal;
+                }
+                if (minRatio > zoomRatio + 0.001f) continue;
+                if (minRatio > bestMinRatio) {
+                    bestMinRatio = minRatio;
+                    bestFocal = focal;
+                }
+            }
+            if (bestFocal <= 0f) return null;
+            if (mainFocal > 0f && Math.abs(bestFocal - mainFocal) / mainFocal > 0.25f) {
+                return bestFocal < mainFocal ? "W" : "T";
+            }
+            return "N";
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private void updateZoomLabel(float z, String letter) {
+        String text = String.format(java.util.Locale.US, "%.1fx", z);
+        if (letter != null) text += " " + letter;
+        zoomLabel.setText(text);
+        zoomLabel.setVisibility(android.view.View.VISIBLE);
+    }
+
     private void updateControls() {
         updatePickHint();
-        btnMode.setText(markMode ? R.string.btn_mode_normal : R.string.btn_mode_mark);
+        if (!markMode) {
+            btnMode.setText(R.string.btn_mode_mark);
+        } else if (!invertMode) {
+            btnMode.setText(R.string.btn_mode_next_invert);
+        } else {
+            btnMode.setText(R.string.btn_mode_normal);
+        }
         btnPickColor.setEnabled(markMode && !pickMode);
         btnPickEyedropper.setEnabled(markMode);
         btnPickEyedropper.setText(pickMode ? "Pipette aktiv" : "Pipette");
@@ -616,8 +680,11 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
 
     @Override
     public void onZoomChanged(float z) {
-        if (!setCameraZoom(z)) {
-            surfaceView.getRenderer().setZoom(z);
+        if (setCameraZoom(z)) {
+            updateZoomLabel(z, activeCameraLetter(z));
+        } else {
+            updateZoomLabel(Math.max(1f, z), null);
+            surfaceView.getRenderer().setZoom(Math.max(1f, z));
         }
     }
 
@@ -723,6 +790,9 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
             if (android.os.Build.VERSION.SDK_INT >= 30) {
                 zoomRange = ch.get(CameraCharacteristics.CONTROL_ZOOM_RATIO_RANGE);
                 AppLog.d("zoomRange=" + zoomRange);
+                if (zoomRange != null) {
+                    surfaceView.setZoomRange(zoomRange.getLower(), zoomRange.getUpper());
+                }
             }
             StreamConfigurationMap map = ch.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
             Size best = null;
@@ -798,8 +868,8 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
                                             builder.addTarget(surface);
                                             sess.setRepeatingRequest(builder.build(), null, h);
                                             AppLog.i("Preview laeuft");
-                                            if (currentCameraZoom > 1f && setCameraZoom(currentCameraZoom)) {
-                                                surfaceView.getRenderer().setZoom(1.0f);
+                                            if (Math.abs(currentCameraZoom - 1f) > 0.001f && setCameraZoom(currentCameraZoom)) {
+                                                surfaceView.getRenderer().setZoom(Math.max(1f, currentCameraZoom));
                                             }
                                         } catch (Exception e) {
                                             AppLog.e("setRepeatingRequest failed", e);
