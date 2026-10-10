@@ -194,7 +194,8 @@ public class CameraSurfaceView extends GLSurfaceView implements ScaleGestureDete
                 "void main() {\n" +
                 "  vec2 c = vTexCoord - vec2(0.5);\n" +
                 "  c = c / uZoom;\n" +
-                "  c.x *= uAspect;\n" +
+                "  c.x *= min(uAspect, 1.0);\n" +
+                "  c.y *= 1.0 / max(uAspect, 1.0);\n" +
                 "  vec2 tc = c + vec2(0.5);\n" +
                 "  if (tc.x < 0.0 || tc.x > 1.0 || tc.y < 0.0 || tc.y > 1.0) {\n" +
                 "    gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);\n" +
@@ -238,7 +239,8 @@ public class CameraSurfaceView extends GLSurfaceView implements ScaleGestureDete
                 "void main() {\n" +
                 "  vec2 c = vTexCoord - vec2(0.5);\n" +
                 "  c = c / uZoom;\n" +
-                "  c.x *= uAspect;\n" +
+                "  c.x *= min(uAspect, 1.0);\n" +
+                "  c.y *= 1.0 / max(uAspect, 1.0);\n" +
                 "  vec2 tc = c + vec2(0.5);\n" +
                 "  if (tc.x < 0.0 || tc.x > 1.0 || tc.y < 0.0 || tc.y > 1.0) {\n" +
                 "    gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);\n" +
@@ -257,7 +259,8 @@ public class CameraSurfaceView extends GLSurfaceView implements ScaleGestureDete
                 "  faded = faded * sepia;\n" +
                 "  faded = clamp(faded * 0.85 + 0.30, 0.0, 1.0);\n" +
                 "  faded = mix(faded * 0.35 + vec3(0.02), faded, uBrightMode);\n" +
-                "  vec3 neon = hsv2rgb(vec3(uTargetHSV.x, 1.0, 1.0));\n" +
+                "  vec3 neonHue = mix(vec3(uTargetHSV.x), vec3(hsv.x), uInvert);\n" +
+                "  vec3 neon = hsv2rgb(vec3(neonHue.x, 1.0, 1.0));\n" +
                 "  neon = mix(neon, vec3(1.0), 0.15);\n" +
                 "  float pulse = 0.75 + 0.25 * sin(uTime * 2.0 * 3.14159265 * 4.0);\n" +
                 "  neon = neon * pulse;\n" +
