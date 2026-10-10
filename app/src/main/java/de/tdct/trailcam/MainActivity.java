@@ -443,42 +443,38 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
     }
 
     private String activeCameraLetter(float zoomRatio) {
-        if (android.os.Build.VERSION.SDK_INT < 30) return null;
+        if (android.os.Build.VERSION.SDK_INT < 30 || logicalCameraId == null) return null;
         try {
             CameraManager mgr = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
             if (mgr == null) return null;
-            float mainFocal = -1f;
-            float bestMinRatio = -1f;
+            CameraCharacteristics logical = mgr.getCameraCharacteristics(logicalCameraId);
+            float logicalFocal = -1f;
+            float[] lf = logical.get(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS);
+            if (lf != null && lf.length > 0) logicalFocal = lf[0];
+            float bestCutoff = -1f;
             float bestFocal = -1f;
-            for (String id : mgr.getCameraIdList()) {
-                CameraCharacteristics ch = mgr.getCameraCharacteristics(id);
-                Integer facing = ch.get(CameraCharacteristics.LENS_FACING);
-                if (facing == null || facing != CameraCharacteristics.LENS_FACING_BACK) continue;
-                Range<Float> zr = ch.get(CameraCharacteristics.CONTROL_ZOOM_RATIO_RANGE);
-                float minRatio = 1f;
-                if (zr != null && zr.getLower() != null) {
-                    minRatio = zr.getLower();
-                }
+            for (String pid : logical.getPhysicalCameraIds()) {
+                CameraCharacteristics ch = mgr.getCameraCharacteristics(pid);
                 float[] focals = ch.get(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS);
                 float focal = (focals != null && focals.length > 0) ? focals[0] : -1f;
-                if (Math.abs(minRatio - 1f) < 0.001f && focal > 0f) {
-                    mainFocal = focal;
-                }
-                if (minRatio > zoomRatio + 0.001f) continue;
-                if (minRatio > bestMinRatio) {
-                    bestMinRatio = minRatio;
+                if (focal <= 0f || logicalFocal <= 0f) continue;
+                float cutoff = focal / logicalFocal;
+                if (cutoff > zoomRatio + 0.001f) continue;
+                if (cutoff > bestCutoff) {
+                    bestCutoff = cutoff;
                     bestFocal = focal;
                 }
             }
-            if (bestFocal <= 0f) return null;
-            if (mainFocal > 0f && Math.abs(bestFocal - mainFocal) / mainFocal > 0.25f) {
-                return bestFocal < mainFocal ? "W" : "T";
+            if (bestFocal <= 0f || logicalFocal <= 0f) return null;
+            if (Math.abs(bestFocal - logicalFocal) / logicalFocal > 0.25f) {
+                return bestFocal < logicalFocal ? "W" : "T";
             }
             return "N";
         } catch (Exception e) {
             return null;
         }
     }
+
 
     private void updateZoomLabel(float z, String letter) {
         String text = String.format(java.util.Locale.US, "%.1fx", z);
@@ -650,6 +646,7 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
 
     private float currentCameraZoom = 1f;
     private Range<Float> zoomRange = null;
+    private String logicalCameraId = null;
 
     private boolean setCameraZoom(float z) {
         CameraCaptureSession s = session;
@@ -738,6 +735,33 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
         }
     }
 
+    private static String findLogicalMultiCamera(CameraManager mgr, String physicalId) {
+        if (android.os.Build.VERSION.SDK_INT < 28) return null;
+        try {
+            for (String id : mgr.getCameraIdList()) {
+                CameraCharacteristics ch = mgr.getCameraCharacteristics(id);
+                int[] caps = ch.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES);
+                if (caps == null) continue;
+                boolean logical = false;
+                for (int c : caps) {
+                    if (c == CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_LOGICAL_MULTI_CAMERA) {
+                        logical = true;
+                        break;
+                    }
+                }
+                if (!logical) continue;
+                java.util.Set<String> physicalIds =
+                        ch.getPhysicalCameraIds();
+                if (physicalIds.contains(physicalId)) {
+                    return id;
+                }
+            }
+        } catch (Exception e) {
+            AppLog.w("findLogicalMultiCamera failed: " + e);
+        }
+        return null;
+    }
+
     @SuppressLint("MissingPermission")
     private void startCamera() {
         sessionRetryCount = 0;
@@ -774,6 +798,16 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
                 if (facing != null && facing == CameraCharacteristics.LENS_FACING_BACK) {
                     cameraId = id;
                     break;
+                }
+            }
+            if (cameraId != null) {
+                String logicalId = findLogicalMultiCamera(mgr, cameraId);
+                if (logicalId != null) {
+                    AppLog.d("logical multi camera: " + cameraId + " -> " + logicalId);
+                    logicalCameraId = logicalId;
+                    cameraId = logicalId;
+                } else {
+                    logicalCameraId = null;
                 }
             }
             if (cameraId == null && mgr.getCameraIdList().length > 0) {
