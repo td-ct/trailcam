@@ -202,6 +202,8 @@ public class CameraSurfaceView extends GLSurfaceView implements ScaleGestureDete
                 "uniform float uSatMax;\n" +
                 "uniform float uValMin;\n" +
                 "uniform float uValMax;\n" +
+                "uniform float uTime;\n" +
+                "uniform float uBrightMode;\n" +
                 "\n" +
                 "vec3 hsv2rgb(vec3 c) {\n" +
                 "  vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);\n" +
@@ -237,8 +239,11 @@ public class CameraSurfaceView extends GLSurfaceView implements ScaleGestureDete
                 "  vec3 sepia = vec3(1.20, 1.05, 0.80);\n" +
                 "  faded = faded * sepia;\n" +
                 "  faded = clamp(faded * 0.85 + 0.30, 0.0, 1.0);\n" +
+                "  faded = mix(faded * 0.35 + vec3(0.02), faded, uBrightMode);\n" +
                 "  vec3 neon = hsv2rgb(vec3(uTargetHSV.x, 1.0, 1.0));\n" +
                 "  neon = mix(neon, vec3(1.0), 0.15);\n" +
+                "  float pulse = 0.75 + 0.25 * sin(uTime * 2.0 * 3.14159265 * 4.0);\n" +
+                "  neon = neon * pulse;\n" +
                 "  float edge = smoothstep(uHueTol, uHueTol * 0.35, hueDiff)\n" +
                 "      * smoothstep(uSatMin, uSatMin + 0.08, hsv.y)\n" +
                 "      * smoothstep(uValMin, uValMin + 0.08, hsv.z)\n" +
@@ -259,6 +264,7 @@ public class CameraSurfaceView extends GLSurfaceView implements ScaleGestureDete
         private int mvpLocN, stLocN, zoomLocN;
         private int mvpLocM, stLocM, zoomLocM, hsvLocM, tolLocM;
         private int satMinLocM, satMaxLocM, valMinLocM, valMaxLocM;
+        private int timeLocM, brightLocM;
         private int texId;
         private SurfaceTexture surfaceTexture;
         private float[] mvp = new float[16];
@@ -272,6 +278,8 @@ public class CameraSurfaceView extends GLSurfaceView implements ScaleGestureDete
         private volatile float hueTol = 0.083f;
         private volatile float satMin = 0f, satMax = 1f;
         private volatile float valMin = 0f, valMax = 1f;
+        private volatile float brightMode = 1f;
+        private long startTime = android.os.SystemClock.elapsedRealtime();
         private AtomicReference<float[]> pickRequest;
         private int surfaceWidth = 1;
         private int surfaceHeight = 1;
@@ -324,6 +332,10 @@ public class CameraSurfaceView extends GLSurfaceView implements ScaleGestureDete
             satMax = clamp01(max01);
         }
 
+        public void setBrightMode(float b) {
+            brightMode = Math.max(0f, Math.min(1f, b));
+        }
+
         public void setValRange(float min01, float max01) {
             valMin = clamp01(min01);
             valMax = clamp01(max01);
@@ -369,6 +381,8 @@ public class CameraSurfaceView extends GLSurfaceView implements ScaleGestureDete
             satMaxLocM = GLES20.glGetUniformLocation(programMark, "uSatMax");
             valMinLocM = GLES20.glGetUniformLocation(programMark, "uValMin");
             valMaxLocM = GLES20.glGetUniformLocation(programMark, "uValMax");
+            timeLocM = GLES20.glGetUniformLocation(programMark, "uTime");
+            brightLocM = GLES20.glGetUniformLocation(programMark, "uBrightMode");
 
             view.fireSurfaceCreated(surfaceTexture, texId);
         }
@@ -468,6 +482,8 @@ public class CameraSurfaceView extends GLSurfaceView implements ScaleGestureDete
                 GLES20.glUniform1f(satMaxLocM, satMax);
                 GLES20.glUniform1f(valMinLocM, valMin);
                 GLES20.glUniform1f(valMaxLocM, valMax);
+                GLES20.glUniform1f(timeLocM, (android.os.SystemClock.elapsedRealtime() - startTime) / 1000f);
+                GLES20.glUniform1f(brightLocM, brightMode);
             }
 
             GLES20.glActiveTexture(GLES20.GL_TEXTURE0);

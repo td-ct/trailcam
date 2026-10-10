@@ -14,6 +14,10 @@ import android.hardware.camera2.CameraDevice;
 import android.hardware.camera2.CameraManager;
 import android.hardware.camera2.CaptureRequest;
 import android.hardware.camera2.params.StreamConfigurationMap;
+import android.hardware.Sensor;
+import android.hardware.SensorEvent;
+import android.hardware.SensorEventListener;
+import android.hardware.SensorManager;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.HandlerThread;
@@ -64,6 +68,18 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
     private Surface previewSurface;
     private HandlerThread bgThread;
     private Handler bgHandler;
+    private SensorManager sensorManager;
+    private Sensor lightSensor;
+    private final SensorEventListener lightListener = new SensorEventListener() {
+        @Override
+        public void onSensorChanged(SensorEvent event) {
+            float lux = event.values[0];
+            float b = Math.max(0f, Math.min(1f, (lux - 10f) / 90f));
+            surfaceView.getRenderer().setBrightMode(b);
+        }
+        @Override
+        public void onAccuracyChanged(Sensor sensor, int accuracy) { }
+    };
     private SurfaceTexture glSurfaceTexture;
     private boolean markMode = false;
     private boolean pickMode = false;
@@ -106,7 +122,7 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
 
     private static final class ColorPreset {
         String name;
-        final int colorRgb;
+        int colorRgb;
         float hueTol;
         float satMin, satMax;
         float valMin, valMax;
@@ -280,7 +296,7 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
             i++;
         }
         ed.putString("presets", sb.toString());
-        ed.apply();
+        ed.commit();
     }
 
     private void loadPresetSettings() {
@@ -308,35 +324,57 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
     }
 
     private void loadPickedPresets() {
+        for (int i = 1; i <= MAX_PICKED_PRESETS; i++) {
+            colorPresets.add(new ColorPreset("Pipette #" + i,
+                    android.graphics.Color.rgb(120, 120, 120)));
+        }
         String saved = prefs().getString("picked", "");
         if (saved == null || saved.isEmpty()) return;
+        java.util.List<ColorPreset> loaded = new java.util.ArrayList<>();
         for (String e : saved.split(";")) {
             String[] f = e.split("\\|");
             if (f.length != 7) continue;
             try {
-                colorPresets.add(new ColorPreset(f[0], Integer.parseInt(f[1]),
+                loaded.add(new ColorPreset(f[0], Integer.parseInt(f[1]),
                         Float.parseFloat(f[2]),
                         Float.parseFloat(f[3]), Float.parseFloat(f[4]),
                         Float.parseFloat(f[5]), Float.parseFloat(f[6])));
             } catch (NumberFormatException ignored) {
             }
         }
+        int n = Math.min(loaded.size(), MAX_PICKED_PRESETS);
+        for (int i = 0; i < n; i++) {
+            int slot = MAX_PICKED_PRESETS - n + i;
+            ColorPreset src = loaded.get(i);
+            ColorPreset dst = colorPresets.get(colorPresets.size() - MAX_PICKED_PRESETS + slot);
+            dst.name = src.name;
+            dst.colorRgb = src.colorRgb;
+            dst.hueTol = src.hueTol;
+            dst.satMin = src.satMin;
+            dst.satMax = src.satMax;
+            dst.valMin = src.valMin;
+            dst.valMax = src.valMax;
+        }
+    }
+
+    private java.util.List<ColorPreset> pipetteSlots() {
+        java.util.List<ColorPreset> slots = new java.util.ArrayList<>();
+        for (int i = Math.max(0, colorPresets.size() - MAX_PICKED_PRESETS); i < colorPresets.size(); i++) {
+            slots.add(colorPresets.get(i));
+        }
+        return slots;
     }
 
     private void savePickedPresets() {
-        java.util.List<ColorPreset> picked = new java.util.ArrayList<>();
-        for (ColorPreset p : colorPresets) {
-            if (p.name.startsWith("Pipette ")) picked.add(p);
-        }
         StringBuilder sb = new StringBuilder();
-        for (ColorPreset p : picked) {
+        for (ColorPreset p : pipetteSlots()) {
             if (sb.length() > 0) sb.append(';');
             sb.append(p.name).append('|').append(p.colorRgb).append('|')
                     .append(p.hueTol).append('|')
                     .append(p.satMin).append('|').append(p.satMax).append('|')
                     .append(p.valMin).append('|').append(p.valMax);
         }
-        prefs().edit().putString("picked", sb.toString()).apply();
+        prefs().edit().putString("picked", sb.toString()).commit();
     }
 
     private void applyPreset(ColorPreset p) {
@@ -407,23 +445,30 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
             int rgb = android.graphics.Color.rgb(
                     Math.round(r * 255), Math.round(g * 255), Math.round(b * 255));
             ColorPreset existing = findMatchingPreset(rgb);
-            if (existing != null && !existing.name.startsWith("Pipette ")) {
+            java.util.List<ColorPreset> slots = pipetteSlots();
+            if (existing != null && !slots.contains(existing)) {
                 applyPreset(existing);
             } else {
-                ColorPreset pip = new ColorPreset("Pipette", rgb);
+                int baseIdx = colorPresets.size() - MAX_PICKED_PRESETS;
+                ColorPreset pip;
                 if (existing != null) {
                     pip = existing;
-                    colorPresets.remove(existing);
+                    int idx = colorPresets.indexOf(existing);
+                    if (idx > baseIdx) {
+                        colorPresets.remove(idx);
+                        colorPresets.add(baseIdx, pip);
+                    }
+                } else {
+                    pip = colorPresets.get(colorPresets.size() - 1);
+                    colorPresets.remove(colorPresets.size() - 1);
+                    colorPresets.add(baseIdx, pip);
+                    pip.colorRgb = rgb;
                 }
                 pip.hueTol = hueSlider.getProgress();
                 pip.satMin = satRange.getMinValue();
                 pip.satMax = satRange.getMaxValue();
                 pip.valMin = valRange.getMinValue();
                 pip.valMax = valRange.getMaxValue();
-                colorPresets.add(pip);
-                while (countPicked() > MAX_PICKED_PRESETS) {
-                    colorPresets.remove(firstPickedIndex());
-                }
                 refreshPickedPresetNames();
                 savePickedPresets();
                 applyPreset(pip);
@@ -438,27 +483,9 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
         ColorPreset active = findMatchingPreset(rgb);
         if (active != null) {
             storeCurrentSettingsIntoPreset(active);
-            if (active.name.startsWith("Pipette ")) {
-                savePickedPresets();
-            } else {
-                savePresetSettings();
-            }
+            savePresetSettings();
+            savePickedPresets();
         }
-    }
-
-    private int countPicked() {
-        int n = 0;
-        for (ColorPreset p : colorPresets) {
-            if (p.name.startsWith("Pipette ")) n++;
-        }
-        return n;
-    }
-
-    private int firstPickedIndex() {
-        for (int i = 0; i < colorPresets.size(); i++) {
-            if (colorPresets.get(i).name.startsWith("Pipette ")) return i;
-        }
-        return colorPresets.size() - 1;
     }
 
     private void updateSlideValueLabel() {
@@ -546,14 +573,10 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
     }
 
     private void refreshPickedPresetNames() {
-        int num = countPicked();
-        for (int i = colorPresets.size() - 1; i >= 0; i--) {
-            if (colorPresets.get(i).name.startsWith("Pipette ")
-                    || colorPresets.get(i).name.startsWith("#")) {
-                colorPresets.get(i).name = "Pipette #" + num + " "
-                        + String.format("%06X", colorPresets.get(i).colorRgb);
-                num--;
-            }
+        java.util.List<ColorPreset> slots = pipetteSlots();
+        for (int i = 0; i < slots.size(); i++) {
+            slots.get(i).name = "Pipette #" + (i + 1) + " "
+                    + String.format("%06X", slots.get(i).colorRgb);
         }
     }
 
@@ -798,6 +821,13 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
         super.onResume();
         AppLog.d("onResume");
         ensureBgThread();
+        if (sensorManager == null) {
+            sensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
+            lightSensor = sensorManager != null ? sensorManager.getDefaultSensor(Sensor.TYPE_LIGHT) : null;
+        }
+        if (sensorManager != null && lightSensor != null) {
+            sensorManager.registerListener(lightListener, lightSensor, SensorManager.SENSOR_DELAY_NORMAL);
+        }
         surfaceView.onResume();
         if (glSurfaceTexture != null) {
             startCamera();
@@ -807,6 +837,7 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
     @Override
     protected void onPause() {
         AppLog.d("onPause");
+        if (sensorManager != null) sensorManager.unregisterListener(lightListener);
         closeCamera();
         surfaceView.onPause();
         if (bgThread != null) {
