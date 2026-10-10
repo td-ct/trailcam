@@ -22,6 +22,7 @@ public class CameraSurfaceView extends GLSurfaceView implements ScaleGestureDete
     public interface Listener {
         void onSurfaceCreated(SurfaceTexture texture, int texId);
         void onFrameAvailable();
+        default void onZoomChanged(float zoom) { }
         void onColorPicked(float r, float g, float b);
         default void onPickPointer(float x, float y) { }
         default void onPickPointerGone() { }
@@ -143,7 +144,8 @@ public class CameraSurfaceView extends GLSurfaceView implements ScaleGestureDete
         zoom *= detector.getScaleFactor();
         if (zoom < MIN_ZOOM) zoom = MIN_ZOOM;
         if (zoom > MAX_ZOOM) zoom = MAX_ZOOM;
-        renderer.setZoom(zoom);
+        renderer.setZoom(1.0f);
+        if (listener != null) listener.onZoomChanged(zoom);
         return true;
     }
 
@@ -179,9 +181,11 @@ public class CameraSurfaceView extends GLSurfaceView implements ScaleGestureDete
                 "varying vec2 vTexCoord;\n" +
                 "uniform samplerExternalOES uTexture;\n" +
                 "uniform float uZoom;\n" +
+                "uniform float uAspect;\n" +
                 "void main() {\n" +
                 "  vec2 c = vTexCoord - vec2(0.5);\n" +
                 "  c = c / uZoom;\n" +
+                "  c.x *= uAspect;\n" +
                 "  vec2 tc = c + vec2(0.5);\n" +
                 "  if (tc.x < 0.0 || tc.x > 1.0 || tc.y < 0.0 || tc.y > 1.0) {\n" +
                 "    gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);\n" +
@@ -196,6 +200,7 @@ public class CameraSurfaceView extends GLSurfaceView implements ScaleGestureDete
                 "varying vec2 vTexCoord;\n" +
                 "uniform samplerExternalOES uTexture;\n" +
                 "uniform float uZoom;\n" +
+                "uniform float uAspect;\n" +
                 "uniform vec3 uTargetHSV;\n" +
                 "uniform float uHueTol;\n" +
                 "uniform float uSatMin;\n" +
@@ -223,6 +228,7 @@ public class CameraSurfaceView extends GLSurfaceView implements ScaleGestureDete
                 "void main() {\n" +
                 "  vec2 c = vTexCoord - vec2(0.5);\n" +
                 "  c = c / uZoom;\n" +
+                "  c.x *= uAspect;\n" +
                 "  vec2 tc = c + vec2(0.5);\n" +
                 "  if (tc.x < 0.0 || tc.x > 1.0 || tc.y < 0.0 || tc.y > 1.0) {\n" +
                 "    gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);\n" +
@@ -261,8 +267,8 @@ public class CameraSurfaceView extends GLSurfaceView implements ScaleGestureDete
         private int programNormal;
         private int programMark;
         private int aPosLoc, aTexLoc;
-        private int mvpLocN, stLocN, zoomLocN;
-        private int mvpLocM, stLocM, zoomLocM, hsvLocM, tolLocM;
+        private int mvpLocN, stLocN, zoomLocN, aspectLocN;
+        private int mvpLocM, stLocM, zoomLocM, aspectLocM, hsvLocM, tolLocM;
         private int satMinLocM, satMaxLocM, valMinLocM, valMaxLocM;
         private int timeLocM, brightLocM;
         private int texId;
@@ -274,6 +280,11 @@ public class CameraSurfaceView extends GLSurfaceView implements ScaleGestureDete
         private volatile boolean markMode = false;
         private volatile boolean pickPreview = false;
         private volatile float zoom = 1.0f;
+        private volatile float aspect = 1.0f;
+
+        public void setAspect(float a) {
+            aspect = Math.max(0.1f, Math.min(10f, a));
+        }
         private final float[] targetHsv = {0f, 1f, 1f};
         private volatile float hueTol = 0.083f;
         private volatile float satMin = 0f, satMax = 1f;
@@ -371,10 +382,12 @@ public class CameraSurfaceView extends GLSurfaceView implements ScaleGestureDete
             mvpLocN = GLES20.glGetUniformLocation(programNormal, "uMVP");
             stLocN = GLES20.glGetUniformLocation(programNormal, "uSTMatrix");
             zoomLocN = GLES20.glGetUniformLocation(programNormal, "uZoom");
+            aspectLocN = GLES20.glGetUniformLocation(programNormal, "uAspect");
 
             mvpLocM = GLES20.glGetUniformLocation(programMark, "uMVP");
             stLocM = GLES20.glGetUniformLocation(programMark, "uSTMatrix");
             zoomLocM = GLES20.glGetUniformLocation(programMark, "uZoom");
+            aspectLocM = GLES20.glGetUniformLocation(programMark, "uAspect");
             hsvLocM = GLES20.glGetUniformLocation(programMark, "uTargetHSV");
             tolLocM = GLES20.glGetUniformLocation(programMark, "uHueTol");
             satMinLocM = GLES20.glGetUniformLocation(programMark, "uSatMin");
@@ -471,6 +484,7 @@ public class CameraSurfaceView extends GLSurfaceView implements ScaleGestureDete
             GLES20.glUniformMatrix4fv(mark ? mvpLocM : mvpLocN, 1, false, mvp, 0);
             GLES20.glUniformMatrix4fv(mark ? stLocM : stLocN, 1, false, stMatrix, 0);
             GLES20.glUniform1f(mark ? zoomLocM : zoomLocN, zoom);
+            GLES20.glUniform1f(mark ? aspectLocM : aspectLocN, aspect);
             if (mark) {
                 float[] hsv;
                 synchronized (targetHsv) {
