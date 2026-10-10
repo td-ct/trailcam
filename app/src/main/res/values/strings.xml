@@ -2,6 +2,8 @@
     <string name="app_name">TrailCam</string>
     <string name="btn_mode_normal">Normal</string>
     <string name="btn_mode_mark">Markierung</string>
+    <string name="btn_mode_invert">Invertierung</string>
+    <string name="btn_mode_next_invert">Invertierung</string>
     <string name="select_color">Farbe wählen</string>
     <string name="threshold">Schwellenwert</string>
 </resources>
