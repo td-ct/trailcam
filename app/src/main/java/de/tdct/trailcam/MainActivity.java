@@ -459,7 +459,7 @@ public class MainActivity extends Activity implements CameraSurfaceView.Listener
                 if (zr != null && zr.getLower() != null) {
                     minRatio = zr.getLower();
                 }
-                Float[] focals = ch.get(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS);
+                float[] focals = ch.get(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS);
                 float focal = (focals != null && focals.length > 0) ? focals[0] : -1f;
                 if (Math.abs(minRatio - 1f) < 0.001f && focal > 0f) {
                     mainFocal = focal;
